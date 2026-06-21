@@ -389,7 +389,6 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
       <div class="live-pill" id="live-pill"><span class="lp"></span><span id="live-cnt">0</span>&nbsp;Live</div>
       <!-- Desktop nav -->
       <div class="nav-d">
-        <button class="lv" onclick="go('live',this)">🔴 Live</button>
         <button class="on" onclick="go('home',this)">Home</button>
         <button onclick="go('results',this)">Results</button>
         <button onclick="go('groups',this)">Groups</button>
@@ -451,15 +450,10 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
   <div id="srch-results" style="padding:12px"></div>
 </div>
 
-<!-- 🔴 LIVE -->
-<div id="pane-live" class="pane">
-  <div class="sb"><div class="sb-dot go" id="sb-dot-live"></div><span id="sb-msg-live">Fetching live scores…</span><span class="sb-cd" id="live-cd"></span></div>
-  <div id="live-out"><div class="empty">Checking for live matches…</div></div>
-</div>
-
 <!-- 🏠 HOME -->
 <div id="pane-home" class="pane on">
   <div class="sb"><div class="sb-dot go" id="sb-dot"></div><span id="sb-msg">Loading match data…</span><span class="sb-cd" id="main-cd"></span></div>
+  <div id="live-sec"></div>
   <div id="upcoming-sec"></div>
   <div id="today-sec"></div>
   <div id="home-grp"></div>
@@ -546,10 +540,6 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
 
 <!-- MOBILE BOTTOM NAV -->
 <nav class="nav-m">
-  <button class="lv" onclick="go('live',this)">
-    <span class="ni">🔴</span><span class="nl">Live</span>
-    <span class="nbadge" id="mob-lv-badge">0</span>
-  </button>
   <button class="on" onclick="go('home',this)"><span class="ni">🏠</span><span class="nl">Home</span></button>
   <button onclick="go('results',this)"><span class="ni">📋</span><span class="nl">Results</span></button>
   <button onclick="go('groups',this)"><span class="ni">📊</span><span class="nl">Groups</span></button>
@@ -1032,32 +1022,22 @@ function renderSchedule(now){
 // ════════════════════════════════════════════════
 //  LIVE TAB
 // ════════════════════════════════════════════════
-function renderLive(now){
-  const out=document.getElementById('live-out');if(!out)return;
+function renderLiveOnHome(now){
   const liveWC=WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const n=liveWC.length;
-  // Update badges
+  // Update header pill badge (kept as a small glance indicator even without a Live tab)
   const pill=document.getElementById('live-pill'),cnt=document.getElementById('live-cnt');
-  const mob=document.getElementById('mob-lv-badge');
   if(pill)pill.className='live-pill'+(n>0?' on':'');
   if(cnt)cnt.textContent=n;
-  if(mob){mob.className='nbadge'+(n>0?' on':'');mob.textContent=n;}
-  // Status
-  const dot=document.getElementById('sb-dot-live'),msg=document.getElementById('sb-msg-live');
-  if(dot){dot.className='sb-dot';dot.style.background=n>0?'var(--re)':'var(--gr)';}
-  if(msg)msg.textContent=n>0?`🔴 ${n} match${n>1?'es':''} live · refreshing every 30s`:`No live matches · ${WCG.filter(g=>g.status==='FT').length} completed · ${now.toLocaleTimeString()}`;
-  if(!n){
-    const next=OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt)[0];
-    out.innerHTML=`<div class="no-live"><div class="no-live-ico">⚽</div><h3>No live matches now</h3><p>Scores update every 30 seconds automatically during matches.<br>Data from worldcup26.ir — free, no key needed.</p>${next?`<div class="nxt-box">⏱ Next: <b>${next.hf} ${next.home} vs ${next.away} ${next.af}</b><br>${fmtDL(next.dt)} · ${lt(next.dt)}</div>`:''}</div>`;
-    return;
-  }
-  out.innerHTML=`<div class="live-grid">${liveWC.map(g=>{
+  if(!n)return'';
+  const cards=liveWC.map(g=>{
     const opfM=OPF.find(m=>normTeam(m.home)===normTeam(g.home)||normTeam(m.home).includes(normTeam(g.home))||normTeam(g.home).includes(normTeam(m.home)));
     const evs=[...(opfM?.g1||[]).map(e=>({...e,tf:g.hf})),...(opfM?.g2||[]).map(e=>({...e,tf:g.af}))].sort((a,b)=>parseInt(b.minute||'0')-parseInt(a.minute||'0'));
     const evHTML=evs.length?`<div class="lmc-evs">${evs.slice(0,6).map(e=>`<div class="ev-row"><span class="ev-min">${e.minute||''}'</span><span class="ev-ico">⚽</span><span class="ev-nm">${e.name||''}</span><span class="ev-tf">${e.tf}</span></div>`).join('')}</div>`:'';
     return`<div class="lmc"><div class="lmc-hd"><span class="lmc-grp">Group ${g.group} · MD${g.matchday}</span><div class="lmc-status"><span class="lmc-dot"></span><span class="lmc-min">${g.status==='HT'?'HT':g.minute?g.minute+"'":'LIVE'}</span></div></div>
     <div class="lmc-body"><div class="lmc-fix"><div class="lmc-team"><span class="lmc-fl">${g.hf}</span><span class="lmc-nm">${g.home}</span></div><div class="lmc-ctr"><div class="lmc-sc">${g.hs??'–'}–${g.as??'–'}</div></div><div class="lmc-team r"><span class="lmc-fl">${g.af}</span><span class="lmc-nm">${g.away}</span></div></div><div class="lmc-ven">${g.venue}</div></div>${evHTML}</div>`;
-  }).join('')}</div>`;
+  }).join('');
+  return`<div style="margin-bottom:16px"><div class="section-label">🔴 Live Now</div><div class="live-grid">${cards}</div></div>`;
 }
 
 // ════════════════════════════════════════════════
@@ -1154,6 +1134,7 @@ function startNextBarTimer(next){
 function renderAll(){
   const now=new Date(),S=getStandings(now);
   // Home
+  const ls=document.getElementById('live-sec');if(ls)ls.innerHTML=renderLiveOnHome(now);
   const us=document.getElementById('upcoming-sec');if(us)us.innerHTML=renderUpcoming(now);
   const ts=document.getElementById('today-sec');if(ts)ts.innerHTML=renderToday(now);
   // Home groups
@@ -1167,8 +1148,6 @@ function renderAll(){
   const br=document.getElementById('bracket-out');if(br)br.innerHTML=renderBracket(now);
   const so=document.getElementById('scorers-out');if(so)so.innerHTML=renderScorers(now);
   const st=document.getElementById('stats-out');if(st)st.innerHTML=renderStats(now);
-  // Live
-  renderLive(now);
   renderTicker(now);
   // Status bar
   const dot=document.getElementById('sb-dot'),msg=document.getElementById('sb-msg');
@@ -1234,8 +1213,8 @@ function startCountdown(){
   mainCd=30;
   cdCountdownTimer=setInterval(()=>{
     mainCd--;
-    const e1=document.getElementById('main-cd'),e2=document.getElementById('live-cd');
-    if(e1)e1.textContent=`↻ ${mainCd}s`;if(e2)e2.textContent=`↻ ${mainCd}s`;
+    const e1=document.getElementById('main-cd');
+    if(e1)e1.textContent=`↻ ${mainCd}s`;
     if(mainCd<=0){refresh();mainCd=30;}
   },1000);
 }
