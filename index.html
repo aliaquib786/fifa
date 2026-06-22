@@ -6,7 +6,7 @@
 <title>FIFA World Cup 2026™ — Live</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
 <style>
-/* ── Full styles (unchanged from before) ── */
+/* ── all styles (unchanged) ── */
 :root{
   --bg:#f7f6f1;--w:#fff;--gold:#c8a84b;--g2:#9c7916;
   --glt:#fdf0cc;--gbg:#fffbee;--ink:#16140b;
@@ -401,8 +401,8 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
       <span class="sch-chip" onclick="chipSearch('France')">🇫🇷 France</span>
       <span class="sch-chip" onclick="chipSearch('England')">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</span>
       <span class="sch-chip" onclick="chipSearch('Argentina')">🇦🇷 Argentina</span>
-      <span class="sch-chip" onclick="chipSearch('MetLife')">🏟 MetLife</span>
-      <span class="sch-chip" onclick="chipSearch('Mbappe')">⚽ Mbappé</span>
+      <span class="sch-chip" onclick="chipSearch('Qatar')">🇶🇦 Qatar</span>
+      <span class="sch-chip" onclick="chipSearch('Saudi Arabia')">🇸🇦 Saudi Arabia</span>
     </div>
     <span class="search-results-count" id="srch-count"></span>
   </div>
@@ -540,9 +540,7 @@ const WC_GAMES_URL  = 'https://worldcup26.ir/get/games';
 const WC_GROUPS_URL = 'https://worldcup26.ir/get/groups';
 const WC_TEAMS_URL  = 'https://worldcup26.ir/get/teams';
 const OPF_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
-// ── ESPN public API ──
 const ESPN_SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
-// You can also use: 'https://site.api.espn.com/apis/site/v2/sports/soccer/eng.1/scoreboard' for Premier League testing
 
 // ════════════════════════════════════════════════
 //  TIMEZONE
@@ -595,14 +593,19 @@ function sn(n){return SHORT[n]||n||'';}
 let WCG=[], WCGRPS=[], OPF=[];
 let WC_TEAM_MAP={};
 let countdownIntervals={};
-let mainCd=60; // 60 second refresh (ESPN-friendly)
+let mainCd=60;
 const KO=new Set(['Round of 32','Round of 16','Quarter-final','Semi-final','Match for third place','Final']);
-
-// ── ESPN live matches ──
 let ESPN_LIVE_MATCHES = [];
 let ESPN_OK = false;
-let ESPN_LAST_ERROR = '';
-let SOURCE_LABEL = ''; // 'ESPN', 'worldcup26', 'sim'
+
+// ── Loading state ──
+let dataLoaded = {
+  espn: false,
+  opf: false,
+  wcg: false,
+  wcgrps: false,
+  teams: false
+};
 
 // ════════════════════════════════════════════════
 //  PARSE worldcup26.ir game
@@ -638,7 +641,7 @@ function parseOPF(raw,i){
 }
 
 // ════════════════════════════════════════════════
-//  MERGE: get live score/status for a match
+//  MERGE
 // ════════════════════════════════════════════════
 function normTeam(s){return (s||'').toLowerCase().replace(/[^a-z]/g,'');}
 function merge(m,now){
@@ -664,16 +667,16 @@ async function fetchLiveFromESPN() {
     const response = await fetch(ESPN_SCOREBOARD_URL);
     if (!response.ok) {
       ESPN_OK = false;
-      ESPN_LAST_ERROR = 'HTTP ' + response.status;
       ESPN_LIVE_MATCHES = [];
+      dataLoaded.espn = true;
       return;
     }
     const data = await response.json();
-    // ESPN structure: data.events[]
     const events = data.events || [];
     if (events.length === 0) {
       ESPN_LIVE_MATCHES = [];
       ESPN_OK = true;
+      dataLoaded.espn = true;
       return;
     }
 
@@ -717,7 +720,7 @@ async function fetchLiveFromESPN() {
         status: status,
         minute: minute,
         venue: comp.venue?.fullName || '',
-        group: '', // ESPN doesn't provide group in this endpoint
+        group: '',
         matchday: '',
         isESPN: true,
         isSim: false,
@@ -728,12 +731,12 @@ async function fetchLiveFromESPN() {
 
     ESPN_LIVE_MATCHES = parsed;
     ESPN_OK = true;
-    ESPN_LAST_ERROR = '';
+    dataLoaded.espn = true;
   } catch (err) {
     console.warn('ESPN fetch error:', err);
     ESPN_OK = false;
-    ESPN_LAST_ERROR = err.message;
     ESPN_LIVE_MATCHES = [];
+    dataLoaded.espn = true;
   }
 }
 
@@ -748,7 +751,6 @@ function generateSimulatedLive(now){
     if(m.hG!==null)return;
     const diff = now - m.dt;
     if(diff > 0 && diff < KICKOFF_WINDOW){
-      // Check if WCG already has a live status for this match
       const mh=normTeam(m.home), ma=normTeam(m.away);
       const existing = WCG.find(g=>{
         const gh=normTeam(g.home), ga=normTeam(g.away);
@@ -758,7 +760,6 @@ function generateSimulatedLive(now){
       if(existing && (existing.status==='LIVE'||existing.status==='HT'||existing.status==='FT')){
         return;
       }
-      // Also check ESPN
       const espnMatch = ESPN_LIVE_MATCHES.find(e => {
         const eh = normTeam(e.home), ea = normTeam(e.away);
         return eh === mh || eh.includes(mh) || mh.includes(eh) && (ea === ma || ea.includes(ma) || ma.includes(ea));
@@ -994,7 +995,7 @@ function registerCountdown(m,now){
 }
 
 // ════════════════════════════════════════════════
-//  GENERIC MATCH CARD (supports ESPN, WCG, Sim)
+//  GENERIC MATCH CARD
 // ════════════════════════════════════════════════
 function matchCardGeneric(m,now,forceMode){
   const isESPN = m.isESPN || false;
@@ -1057,7 +1058,6 @@ function matchCardGeneric(m,now,forceMode){
   </div>`;
 }
 
-// ── Also keep the regular matchCard for non‑live matches ──
 function matchCard(m,now,forceMode){
   const mst=merge(m,now);
   const st=forceMode||mst.st;
@@ -1112,7 +1112,7 @@ function matchCard(m,now,forceMode){
 }
 
 // ════════════════════════════════════════════════
-//  HOME: TODAY MATCHES
+//  HOME: TODAY
 // ════════════════════════════════════════════════
 function renderToday(now){
   const today=todayKey();
@@ -1140,7 +1140,7 @@ function renderToday(now){
 }
 
 // ════════════════════════════════════════════════
-//  HOME: UPCOMING CARDS
+//  HOME: UPCOMING
 // ════════════════════════════════════════════════
 function renderUpcoming(now){
   const upcoming=OPF.filter(m=>{const ms=merge(m,now);return ms.st==='NS'&&m.dt&&m.dt>now;}).sort((a,b)=>a.dt-b.dt).slice(0,4);
@@ -1265,15 +1265,13 @@ function renderSchedule(now){
 }
 
 // ════════════════════════════════════════════════
-//  LIVE TAB – combines ESPN + WCG + Sim
+//  LIVE
 // ════════════════════════════════════════════════
 function renderLiveOnHome(now){
-  // Priority: ESPN > WCG > Sim
   const espnLive = ESPN_LIVE_MATCHES.filter(m=>m.status==='LIVE'||m.status==='HT');
   const wcgLive = WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const sims = generateSimulatedLive(now);
 
-  // Remove sims that conflict with ESPN or WCG
   const filteredSims = sims.filter(sim => {
     const exists = espnLive.some(e => normTeam(e.home)===normTeam(sim.home) && normTeam(e.away)===normTeam(sim.away));
     if(exists) return false;
@@ -1526,33 +1524,42 @@ async function fetchWCTeams(){
       map[id]={name,flag_emoji:fl(name),code:t.fifa_code||''};
     });
     WC_TEAM_MAP=map;
+    dataLoaded.teams = true;
     return true;
   }catch(e){console.warn('WC_TEAMS:',e.message);return false;}
 }
-async function fetchWCG(){try{const r=await fetch(WC_GAMES_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();const arr=Array.isArray(d)?d:(d.games||d.data||d.result||[]);WCG=arr.map(parseWCG);return true;}catch(e){console.warn('WCG:',e.message);return false;}}
-async function fetchWCGroups(){try{const r=await fetch(WC_GROUPS_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();WCGRPS=Array.isArray(d)?d:(d.groups||d.data||d.result||[]);return true;}catch(e){console.warn('WCGRPS:',e.message);return false;}}
-async function fetchOPF(){try{const r=await fetch(OPF_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(10000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();OPF=(d.matches||[]).map((m,i)=>parseOPF(m,i));return true;}catch(e){console.warn('OPF:',e.message);return false;}}
+async function fetchWCG(){try{const r=await fetch(WC_GAMES_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();const arr=Array.isArray(d)?d:(d.games||d.data||d.result||[]);WCG=arr.map(parseWCG);dataLoaded.wcg=true;return true;}catch(e){console.warn('WCG:',e.message);return false;}}
+async function fetchWCGroups(){try{const r=await fetch(WC_GROUPS_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();WCGRPS=Array.isArray(d)?d:(d.groups||d.data||d.result||[]);dataLoaded.wcgrps=true;return true;}catch(e){console.warn('WCGRPS:',e.message);return false;}}
+async function fetchOPF(){try{const r=await fetch(OPF_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(10000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();OPF=(d.matches||[]).map((m,i)=>parseOPF(m,i));dataLoaded.opf=true;return true;}catch(e){console.warn('OPF:',e.message);return false;}}
 
-async function refresh(){
-  const dot=document.getElementById('sb-dot'),msg=document.getElementById('sb-msg');
-  if(dot)dot.className='sb-dot go';if(msg)msg.textContent='Refreshing…';
-  mainCd=60;
+// ════════════════════════════════════════════════
+//  OPTIMISED LOADER – fires all fetches in parallel
+// ════════════════════════════════════════════════
+let isFirstLoad = true;
 
+function loadAllData() {
+  // 1. Show skeleton immediately
   renderAll();
-
-  // 1. Fetch ESPN first (primary)
-  await fetchLiveFromESPN();
-
-  // 2. Fetch OPF (schedule) - fast
-  await fetchOPF();
-
-  // 3. Fetch teams, WCG, groups (worldcup26 fallback)
-  if (!Object.keys(WC_TEAM_MAP).length) {
-    await fetchWCTeams();
-  }
-  await Promise.allSettled([fetchWCG(), fetchWCGroups()]);
-
-  renderAll();
+  
+  // 2. Fire all fetches in parallel (non-blocking)
+  fetchLiveFromESPN().then(() => {
+    renderAll();
+  });
+  
+  fetchOPF().then(() => {
+    renderAll();
+    // After OPF loads, we can show upcoming/today
+  });
+  
+  // 3. Teams + WCG + Groups (chained)
+  fetchWCTeams().then(() => {
+    return Promise.allSettled([fetchWCG(), fetchWCGroups()]);
+  }).then(() => {
+    renderAll();
+  });
+  
+  // 4. Second render after ESPN completes (in case it was slow)
+  // (already handled above)
 }
 
 // ════════════════════════════════════════════════
@@ -1566,7 +1573,17 @@ function startCountdown(){
     mainCd--;
     const e1=document.getElementById('main-cd');
     if(e1)e1.textContent=`↻ ${mainCd}s`;
-    if(mainCd<=0){refresh();mainCd=60;}
+    if(mainCd<=0){
+      // Refresh all data in background
+      fetchLiveFromESPN().then(() => renderAll());
+      fetchOPF().then(() => renderAll());
+      if (!Object.keys(WC_TEAM_MAP).length) {
+        fetchWCTeams().then(() => {
+          Promise.allSettled([fetchWCG(), fetchWCGroups()]).then(() => renderAll());
+        });
+      }
+      mainCd=60;
+    }
   },1000);
 }
 
@@ -1591,8 +1608,15 @@ function go(name,btn){
 //  INIT
 // ════════════════════════════════════════════════
 
+// Render the page skeleton immediately
 renderAll();
-refresh();
+
+// Start loading data in parallel after a tiny delay to allow paint
+setTimeout(() => {
+  loadAllData();
+}, 50);
+
+// Start the countdown timer
 startCountdown();
 
 </script>
