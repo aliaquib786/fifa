@@ -327,6 +327,30 @@ tr.q3 td:first-child{border-left:3px solid var(--gold);}
 .srow-min{font-size:9px;background:var(--glt);color:var(--g2);padding:1px 5px;border-radius:3px;font-weight:700;}
 .srow-g{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--g2);flex-shrink:0;}
 
+/* ── New Scorers Grid Layout ── */
+.scorers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+}
+.scorer-card {
+  background: var(--w);
+  border: 1px solid var(--ru);
+  border-radius: var(--r);
+  padding: 16px;
+  box-shadow: var(--sh);
+}
+.scorer-card .sec-hd {
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--ru);
+  padding-bottom: 8px;
+}
+.scorer-card .sec-hd h2 {
+  font-size: 14px;
+  margin: 0;
+}
+@media(max-width:480px){.scorers-grid{grid-template-columns:1fr;}}
+
 /* ═══ BRACKET ═══ */
 .br-note{background:var(--gbg);border:1.5px solid var(--gold);border-radius:var(--r);padding:10px 12px;margin-bottom:12px;font-size:11px;color:var(--g2);}
 .br-wrap{overflow-x:auto;padding-bottom:10px;-webkit-overflow-scrolling:touch;}
@@ -414,8 +438,8 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
       <span class="sch-chip" onclick="chipSearch('France')">🇫🇷 France</span>
       <span class="sch-chip" onclick="chipSearch('England')">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</span>
       <span class="sch-chip" onclick="chipSearch('Argentina')">🇦🇷 Argentina</span>
-      <span class="sch-chip" onclick="chipSearch('MetLife')">🏟 MetLife</span>
-      <span class="sch-chip" onclick="chipSearch('Mbappe')">⚽ Mbappé</span>
+      <span class="sch-chip" onclick="chipSearch('Qatar')">QA Qatar</span>
+      <span class="sch-chip" onclick="chipSearch('Saudi Arabia')">SA Saudi Arabia</span>
     </div>
     <span class="search-results-count" id="srch-count"></span>
   </div>
@@ -499,7 +523,7 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
 
 <!-- ⚽ SCORERS -->
 <div id="pane-scorers" class="pane">
-  <div class="sec-hd"><h2>Top Scorers</h2></div>
+  <div class="sec-hd"><h2>Golden Boot & Glove</h2></div>
   <div id="scorers-out"><div class="empty">Loading…</div></div>
 </div>
 
@@ -611,16 +635,13 @@ function sn(n){return SHORT[n]||n||'';}
 //  STATE
 // ════════════════════════════════════════════════
 let WCG=[], WCGRPS=[], OPF=[];
-let WC_TEAM_MAP={}; // team_id -> {name, flag, code}
-let APIF_OK=true;       // false once we hit the daily quota or get an auth error
+let WC_TEAM_MAP={};
+let APIF_OK=true;
 let APIF_LAST_ERROR='';
-let refreshTimer=null, nextMatchTimer=null, cdCountdownTimer=null;
-let countdownIntervals={};  // id -> interval
+let countdownIntervals={};
 let mainCd=30;
 const KO=new Set(['Round of 32','Round of 16','Quarter-final','Semi-final','Match for third place','Final']);
-
-// ── NEW: store live matches from API-Football ──
-let APIF_LIVE_MATCHES = []; // array of parsed live match objects
+let APIF_LIVE_MATCHES = [];
 
 // ════════════════════════════════════════════════
 //  PARSE worldcup26.ir game
@@ -660,7 +681,6 @@ function parseOPF(raw,i){
 // ════════════════════════════════════════════════
 function normTeam(s){return (s||'').toLowerCase().replace(/[^a-z]/g,'');}
 function merge(m,now){
-  // Try to find matching WCG record using normalized exact-ish matching
   const mh=normTeam(m.home), ma=normTeam(m.away);
   const wc=WCG.find(g=>{
     const gh=normTeam(g.home), ga=normTeam(g.away);
@@ -679,7 +699,7 @@ function merge(m,now){
 //  PLAYER SEARCH INDEX — built from OPF goals
 // ════════════════════════════════════════════════
 function buildPlayerIndex(){
-  const idx={};// player_name_lower -> [match_idx, ...]
+  const idx={};
   OPF.forEach(m=>{
     [...(m.g1||[]).map(g=>({...g,team:m.home,tf:m.hf,mi:m.i})),...(m.g2||[]).map(g=>({...g,team:m.away,tf:m.af,mi:m.i}))].forEach(g=>{
       if(!g.name)return;
@@ -1032,7 +1052,6 @@ function renderLiveOnHome(now){
     if(cnt)cnt.textContent=n;
 
     const cards = APIF_LIVE_MATCHES.map(m => {
-      // m has: home, away, hf, af, hs, as, minute, venue (maybe)
       return `<div class="lmc">
         <div class="lmc-hd"><span class="lmc-grp">Live</span><div class="lmc-status"><span class="lmc-dot"></span><span class="lmc-min">${m.minute || 'LIVE'}</span></div></div>
         <div class="lmc-body">
@@ -1086,7 +1105,6 @@ function renderLiveOnHome(now){
 // ════════════════════════════════════════════════
 function renderTicker(now){
   const el=document.getElementById('tkr');if(!el)return;
-  // Prefer APIF live if available
   let live = APIF_LIVE_MATCHES.length ? APIF_LIVE_MATCHES : WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const ft=WCG.filter(g=>g.status==='FT'&&g.hs!==null).slice(-6);
   const next=OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt).slice(0,3);
@@ -1121,6 +1139,28 @@ function renderScorers(now){
   const sorted=Object.values(S).sort((a,b)=>b.goals-a.goals);
   if(!sorted.length)return'<div class="empty">No scorers yet.</div>';
   return`<div class="scorer-list">${sorted.map((s,i)=>`<div class="srow"><div class="srow-rk ${i<3?'top':''}">${i+1}</div><div class="srow-fl">${s.tf}</div><div class="srow-inf"><div class="srow-nm">${s.name}</div><div class="srow-tm">${s.tf} ${s.team}</div><div class="srow-mins">${s.mins.map(m=>`<span class="srow-min">${m}'</span>`).join('')}</div></div><div class="srow-g">${s.goals}</div></div>`).join('')}</div>`;
+}
+
+// ── NEW: Golden Glove (Clean Sheets) ──
+function renderGoldenGlove(now) {
+  const cleanSheets = {};
+  OPF.filter(m => m.hG !== null).forEach(m => {
+    if (m.hG === 0) {
+      cleanSheets[m.away] = (cleanSheets[m.away] || 0) + 1;
+    }
+    if (m.aG === 0) {
+      cleanSheets[m.home] = (cleanSheets[m.home] || 0) + 1;
+    }
+  });
+  const sorted = Object.entries(cleanSheets).sort((a, b) => b[1] - a[1]);
+  if (sorted.length === 0) return '<div class="empty">No clean sheet data yet.</div>';
+  return `<div class="scorer-list">${sorted.map(([team, cs], i) => `
+    <div class="srow">
+      <div class="srow-rk ${i<3?'top':''}">${i+1}</div>
+      <div class="srow-fl">${fl(team)}</div>
+      <div class="srow-inf"><div class="srow-nm">${team}</div></div>
+      <div class="srow-g">${cs}</div>
+    </div>`).join('')}</div>`;
 }
 
 // ════════════════════════════════════════════════
@@ -1180,7 +1220,7 @@ function startNextBarTimer(next){
 }
 
 // ════════════════════════════════════════════════
-//  FETCH LIVE FROM API-FOOTBALL (NEW)
+//  FETCH LIVE FROM API-FOOTBALL
 // ════════════════════════════════════════════════
 async function fetchLiveFromAPIFootball() {
   try {
@@ -1188,7 +1228,6 @@ async function fetchLiveFromAPIFootball() {
       headers: { 'x-apisports-key': APIF_KEY }
     });
     if (!response.ok) {
-      // If we get a 429 or 403, we've likely hit the daily limit
       APIF_OK = false;
       APIF_LAST_ERROR = 'HTTP ' + response.status;
       APIF_LIVE_MATCHES = [];
@@ -1196,7 +1235,6 @@ async function fetchLiveFromAPIFootball() {
     }
     const data = await response.json();
     const allMatches = data.response || [];
-    // Filter for World Cup (league id 1 or name contains "World Cup" and not clubs)
     const wcMatches = allMatches.filter(match => {
       if (!match.league) return false;
       const leagueId = match.league.id;
@@ -1205,22 +1243,17 @@ async function fetchLiveFromAPIFootball() {
               (leagueName.includes("WORLD CUP") && !leagueName.includes("CLUBS")) ||
               leagueName.includes("FIFA WORLD CUP"));
     });
-
-    // Map to our internal structure
     APIF_LIVE_MATCHES = wcMatches.map(m => {
       const home = sn(m.teams.home.name);
       const away = sn(m.teams.away.name);
       return {
-        home: home,
-        away: away,
+        home, away,
         hf: fl(home),
         af: fl(away),
         hs: m.goals.home ?? 0,
         as: m.goals.away ?? 0,
         minute: m.fixture.status.elapsed || 'LIVE',
-        venue: m.fixture.venue?.name || '',
-        // keep raw for possible further use
-        _raw: m
+        venue: m.fixture.venue?.name || ''
       };
     });
     APIF_OK = true;
@@ -1238,22 +1271,37 @@ async function fetchLiveFromAPIFootball() {
 // ════════════════════════════════════════════════
 function renderAll(){
   const now=new Date(),S=getStandings(now);
-  // Home
   const ls=document.getElementById('live-sec');if(ls)ls.innerHTML=renderLiveOnHome(now);
   const us=document.getElementById('upcoming-sec');if(us)us.innerHTML=renderUpcoming(now);
   const ts=document.getElementById('today-sec');if(ts)ts.innerHTML=renderToday(now);
-  // Home groups
   const hg=document.getElementById('home-grp');
   if(hg){const played=Object.keys(S).filter(g=>S[g]?.some(t=>t.mp>0));hg.innerHTML=played.length?`<div style="margin-bottom:14px"><div class="sec-hd" style="margin-bottom:8px"><h2>Group Standings</h2><a href="#" onclick="go('groups',null);return false;" style="font-size:9px;font-weight:700;color:var(--g2);text-decoration:none;margin-left:auto">All 12 →</a></div><div class="gg">${played.map(g=>gcHTML(g,S[g],now)).join('')}</div></div>`:'';}
-  // Other panels
   const ro=document.getElementById('results-out');if(ro)ro.innerHTML=renderResults(now);
   const ag=document.getElementById('all-grp');if(ag){const keys=Object.keys(S).sort();ag.innerHTML=keys.length?keys.map(g=>gcHTML(g,S[g],now)).join(''):'<div class="empty">No group data yet</div>';}
   const sc=document.getElementById('sched-out');if(sc)sc.innerHTML=OPF.length?renderSchedule(now):'<div class="empty">Loading…</div>';
   const br=document.getElementById('bracket-out');if(br)br.innerHTML=renderBracket(now);
-  const so=document.getElementById('scorers-out');if(so)so.innerHTML=renderScorers(now);
+  
+  // ── Scorers: two cards ──
+  const so=document.getElementById('scorers-out');
+  if (so) {
+    const bootHTML = renderScorers(now);
+    const gloveHTML = renderGoldenGlove(now);
+    so.innerHTML = `
+      <div class="scorers-grid">
+        <div class="scorer-card">
+          <div class="sec-hd"><h2>⚽ Golden Boot</h2></div>
+          ${bootHTML}
+        </div>
+        <div class="scorer-card">
+          <div class="sec-hd"><h2>🧤 Golden Glove</h2></div>
+          ${gloveHTML}
+        </div>
+      </div>
+    `;
+  }
+
   const st=document.getElementById('stats-out');if(st)st.innerHTML=renderStats(now);
   renderTicker(now);
-  // Status bar
   const dot=document.getElementById('sb-dot'),msg=document.getElementById('sb-msg');
   if(dot){dot.className='sb-dot';dot.style.background='var(--gr)';}
   const liveCount = APIF_LIVE_MATCHES.length || WCG.filter(g=>g.status==='LIVE'||g.status==='HT').length;
@@ -1263,11 +1311,8 @@ function renderAll(){
     return minsAgo>0&&minsAgo<150&&merge(m,now).st==='NS';
   }).length;
   if(msg)msg.textContent=`${OPF.length||WCG.length} matches · ${OPF.filter(m=>m.hG!==null).length} results · ${liveCount?'🔴 Live now · ':''}${pendingCount&&!liveCount?`⏳ ${pendingCount} kicked off, awaiting score · `:''}Updated ${now.toLocaleTimeString()}`;
-  // Register upcoming card countdowns (matches renderUpcoming's selection)
   OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt).slice(0,4).forEach(m=>registerCountdown(m,now));
-  // Search re-render if active
   if(searchQ)doSearch(searchQ);
-  // Next bar timer
   const next=OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt)[0];
   startNextBarTimer(next);
 }
@@ -1300,46 +1345,20 @@ async function refresh(){
   const dot=document.getElementById('sb-dot'),msg=document.getElementById('sb-msg');
   if(dot)dot.className='sb-dot go';if(msg)msg.textContent='Refreshing…';
   mainCd=30;
-  // Fetch APIF live matches (separate, but we do it in parallel with other fetches)
+
+  renderAll();
+  await fetchOPF();
+  renderAll();
+
+  if (!Object.keys(WC_TEAM_MAP).length) {
+    await fetchWCTeams();
+  }
+  await Promise.allSettled([fetchWCG(), fetchWCGroups()]);
+
   if (APIF_OK) {
-    await fetchLiveFromAPIFootball();
-  }
-  if(!Object.keys(WC_TEAM_MAP).length){
-    await fetchWCTeams();
-  }
-  const [wcgOk,wcgrpOk,opfOk]=await Promise.allSettled([fetchWCG(),fetchWCGroups(),fetchOPF()]);
-  if(!Object.keys(WC_TEAM_MAP).length){
-    await fetchWCTeams();
-    if(Object.keys(WC_TEAM_MAP).length){
-      await Promise.allSettled([fetchWCG(),fetchWCGroups()]);
-    }
+    fetchLiveFromAPIFootball().then(() => renderAll());
   }
   renderAll();
-}
-
-// ════════════════════════════════════════════════
-//  DIAGNOSTICS
-// ════════════════════════════════════════════════
-function renderDiag(wcgOk,wcgrpOk,opfOk){
-  const el=document.getElementById('diag-panel');
-  if(!el)return;
-  const liveCount=APIF_LIVE_MATCHES.length || WCG.filter(g=>g.status==='LIVE'||g.status==='HT').length;
-  const sampleLive=APIF_LIVE_MATCHES.length?APIF_LIVE_MATCHES[0]:WCG.find(g=>g.status==='LIVE'||g.status==='HT');
-  const sampleAny=WCG[0];
-  const tbdCount=WCG.filter(g=>g.home==='TBD'||g.away==='TBD').length;
-  const lines=[
-    `fetchWCG: ${wcgOk?.status} ${wcgOk?.value===false?'(returned false — see console)':''}`,
-    `fetchWCGroups: ${wcgrpOk?.status}`,
-    `fetchOPF: ${opfOk?.status}`,
-    `WCG: ${WCG.length} · WCGRPS: ${WCGRPS.length} · OPF: ${OPF.length}`,
-    `WC_TEAM_MAP: ${Object.keys(WC_TEAM_MAP).length} entries`,
-    `WCG TBD names: ${tbdCount}`,
-    `APIF_LIVE_MATCHES: ${APIF_LIVE_MATCHES.length} (API-Football)`,
-    `Live count (total): ${liveCount}`,
-    sampleLive?`Sample live: ${sampleLive.home} vs ${sampleLive.away} | ${sampleLive.hs}-${sampleLive.as} ${sampleLive.minute}`:'No live match',
-    sampleAny?`Sample WCG[0]: ${sampleAny.home} vs ${sampleAny.away} | ${sampleAny.status}`:'WCG empty'
-  ];
-  el.textContent=lines.join('\n');
 }
 
 // ════════════════════════════════════════════════
@@ -1374,12 +1393,13 @@ function go(name,btn){
 // ════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════
-// Fetch APIF live on page load and every 2 minutes (to respect daily limit)
+
+renderAll();
+refresh();
+startCountdown();
 fetchLiveFromAPIFootball();
 setInterval(fetchLiveFromAPIFootball, 120000);
 
-refresh();
-startCountdown();
 </script>
 </body>
 </html>
