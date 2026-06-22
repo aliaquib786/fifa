@@ -328,8 +328,13 @@ tr.q3 td:first-child{border-left:3px solid var(--gold);}
 .srow-g{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--g2);flex-shrink:0;}
 .scorers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;}
 .scorer-card{background:var(--w);border:1px solid var(--ru);border-radius:var(--r);padding:16px;box-shadow:var(--sh);}
-.scorer-card .sec-hd{margin-bottom:12px;border-bottom:1px solid var(--ru);padding-bottom:8px;}
+.scorer-card .sec-hd{margin-bottom:12px;border-bottom:1px solid var(--ru);padding-bottom:8px;cursor:pointer;user-select:none;display:flex;justify-content:space-between;align-items:center;}
 .scorer-card .sec-hd h2{font-size:14px;margin:0;}
+.scorer-card .sec-hd .toggle-icon{font-size:12px;color:var(--mu);transition:transform 0.2s;}
+.scorer-card.collapsed .sec-hd .toggle-icon{transform:rotate(-90deg);}
+.scorer-card .scorer-body{transition:max-height 0.3s ease;overflow:hidden;}
+.scorer-card.collapsed .scorer-body{max-height:0 !important;padding-top:0;}
+.scorer-card .scorer-body{padding-top:8px;}
 @media(max-width:480px){.scorers-grid{grid-template-columns:1fr;}}
 
 /* ═══ BRACKET ═══ */
@@ -694,7 +699,6 @@ let searchQ='';
 
 function renderTeamStandings(teamName){
   const now=new Date();
-  // Find the group of the team from OPF
   let group = null;
   for (const m of OPF) {
     if (m.home === teamName || m.away === teamName) {
@@ -702,11 +706,9 @@ function renderTeamStandings(teamName){
     }
   }
   if (!group) return '';
-  // Get standings for that group
   const S = getStandings(now);
   const groupKey = Object.keys(S).find(k => k.toLowerCase() === group.toLowerCase() || k.replace(/group\s*/i,'').trim() === group);
   if (!groupKey || !S[groupKey] || !S[groupKey].length) return '';
-  // Build a simple table
   const rows = S[groupKey];
   const header = `Group ${groupKey.replace(/group\s*/i,'').trim()}`;
   let html = `<div style="margin-bottom:16px;background:var(--gbg);border:1px solid var(--gold);border-radius:var(--r);padding:12px;">
@@ -805,12 +807,11 @@ function doSearch(q){
 
   // ── NEW: add standings for the searched team if it's a team name ──
   let standingsHTML = '';
-  // check if searchQ matches any team name exactly or partially
   const teamNames = OPF.reduce((acc, m) => { acc.add(m.home); acc.add(m.away); return acc; }, new Set());
   let matchedTeam = null;
   for (const t of teamNames) {
     if (t.toLowerCase() === searchQ) { matchedTeam = t; break; }
-    if (t.toLowerCase().includes(searchQ)) { matchedTeam = t; break; } // prefer partial match
+    if (t.toLowerCase().includes(searchQ)) { matchedTeam = t; break; }
   }
   if (matchedTeam) {
     standingsHTML = renderTeamStandings(matchedTeam);
@@ -1327,16 +1328,30 @@ function renderAll(){
     const gloveHTML = renderGoldenGlove(now);
     so.innerHTML = `
       <div class="scorers-grid">
-        <div class="scorer-card">
-          <div class="sec-hd"><h2>⚽ Golden Boot</h2></div>
-          ${bootHTML}
+        <div class="scorer-card" data-collapsible>
+          <div class="sec-hd" onclick="toggleScorerCard(this)">
+            <h2>⚽ Golden Boot</h2>
+            <span class="toggle-icon">▼</span>
+          </div>
+          <div class="scorer-body">${bootHTML}</div>
         </div>
-        <div class="scorer-card">
-          <div class="sec-hd"><h2>🧤 Golden Glove</h2></div>
-          ${gloveHTML}
+        <div class="scorer-card" data-collapsible>
+          <div class="sec-hd" onclick="toggleScorerCard(this)">
+            <h2>🧤 Golden Glove</h2>
+            <span class="toggle-icon">▼</span>
+          </div>
+          <div class="scorer-body">${gloveHTML}</div>
         </div>
       </div>
     `;
+    // On mobile, collapse the second card initially if the window is narrow
+    if (window.innerWidth <= 480) {
+      const cards = so.querySelectorAll('.scorer-card');
+      if (cards.length > 1) {
+        cards[1].classList.add('collapsed');
+      }
+    }
+    // Also ensure clicking anywhere on the header toggles.
   }
   const st=document.getElementById('stats-out');if(st)st.innerHTML=renderStats(now);
   renderTicker(now);
@@ -1353,6 +1368,19 @@ function renderAll(){
   if(searchQ)doSearch(searchQ);
   const next=OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt)[0];
   startNextBarTimer(next);
+}
+
+// ── Toggle function for scorer cards ──
+function toggleScorerCard(header) {
+  const card = header.closest('.scorer-card');
+  if (card) {
+    card.classList.toggle('collapsed');
+    // Update the toggle icon (optional but nice)
+    const icon = header.querySelector('.toggle-icon');
+    if (icon) {
+      icon.textContent = card.classList.contains('collapsed') ? '▶' : '▼';
+    }
+  }
 }
 
 // ════════════════════════════════════════════════
