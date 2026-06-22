@@ -619,14 +619,15 @@ let countdownIntervals={};  // id -> interval
 let mainCd=30;
 const KO=new Set(['Round of 32','Round of 16','Quarter-final','Semi-final','Match for third place','Final']);
 
+// ── NEW: store live matches from API-Football ──
+let APIF_LIVE_MATCHES = []; // array of parsed live match objects
+
 // ════════════════════════════════════════════════
 //  PARSE worldcup26.ir game
 // ════════════════════════════════════════════════
 function parseWCG(g){
   const hId=String(g.home_team_id||''), aId=String(g.away_team_id||'');
   const hTeam=WC_TEAM_MAP[hId], aTeam=WC_TEAM_MAP[aId];
-  // Primary source: the games payload includes home_team_name_en/away_team_name_en directly.
-  // Fall back to the /get/teams id-lookup only if that's missing (e.g. unresolved KO slots).
   const home=sn(g.home_team_name_en||hTeam?.name||g.home_team_label||'TBD');
   const away=sn(g.away_team_name_en||aTeam?.name||g.away_team_label||'TBD');
   const hs=(g.home_score!==null&&g.home_score!==undefined&&g.home_score!==''&&g.home_score!=='null')?Number(g.home_score):null;
@@ -671,9 +672,6 @@ function merge(m,now){
   if(wc)return{st:wc.status,hs:wc.hs,as:wc.as,min:wc.minute,wc};
   if(m.hG!==null)return{st:'FT',hs:m.hG,as:m.aG};
   if(!m.dt)return{st:'NS'};
-  // No WCG record found for this match — do NOT guess "LIVE" with a blank score,
-  // since that renders as misleading dashes. Keep it as scheduled/NS until the
-  // live data source actually resolves the team names and confirms a real score.
   return{st:'NS'};
 }
 
@@ -706,15 +704,11 @@ function doSearch(q){
   const panel=document.getElementById('search-panel');
   if(inp&&inp.value!==q)inp.value=q;
   if(clr)clr.className='search-clear'+(searchQ?' on':'');
-  // Clear chip states
   document.querySelectorAll('.sch-chip').forEach(c=>c.classList.remove('on'));
   if(!searchQ){panel.className='';cnt.textContent='';return;}
 
   const now=new Date();
-  // Build player index
   const playerIdx=buildPlayerIndex();
-
-  // Find matching matches
   const matchSet=new Set();
   const matchReasons={};
 
@@ -726,7 +720,6 @@ function doSearch(q){
     if(mr.length){matchSet.add(m.i);matchReasons[m.i]=(matchReasons[m.i]||[]).concat(mr);}
   });
 
-  // Player search
   Object.entries(playerIdx).forEach(([key,pi])=>{
     if(key.includes(searchQ)||pi.name.toLowerCase().includes(searchQ)){
       pi.matches.forEach(mi=>{
@@ -737,11 +730,9 @@ function doSearch(q){
     }
   });
 
-  // Also search WCG by team/venue
   WCG.forEach(g=>{
     const wq=searchQ;
     if(g.home.toLowerCase().includes(wq)||g.away.toLowerCase().includes(wq)||g.venue.toLowerCase().includes(wq)){
-      // Find matching OPF
       const opfM=OPF.find(m=>normTeam(m.home)===normTeam(g.home)||normTeam(m.home).includes(normTeam(g.home))||normTeam(g.home).includes(normTeam(m.home)));
       if(opfM){matchSet.add(opfM.i);if(!matchReasons[opfM.i])matchReasons[opfM.i]=[];}
     }
@@ -759,7 +750,6 @@ function doSearch(q){
   if(!out)return;
   if(!results.length){out.innerHTML='<div class="empty">No matches found for "'+q+'"</div>';panel.className='on';return;}
 
-  // Group by status then date
   const live=results.filter(m=>{const s=merge(m,now);return s.st==='LIVE'||s.st==='HT';});
   const upcoming=results.filter(m=>{const s=merge(m,now);return s.st==='NS';}).sort((a,b)=>(a.dt||0)-(b.dt||0));
   const finished=results.filter(m=>{const s=merge(m,now);return s.st==='FT';}).sort((a,b)=>(b.dt||0)-(a.dt||0));
@@ -770,7 +760,6 @@ function doSearch(q){
   if(finished.length){html+=`<div class="section-label">✅ Results</div>${renderResultList(finished,now)}`;}
   out.innerHTML=html;
   panel.className='on';
-  // Register countdowns for search results
   upcoming.forEach(m=>registerCountdown(m,now));
 }
 
@@ -805,8 +794,6 @@ function registerCountdown(m,now){
     if(!el){clearInterval(countdownIntervals[id]);delete countdownIntervals[id];return;}
     const diff=m.dt-new Date();
     if(diff<=0){
-      // Kick-off time reached. Only claim LIVE if merge() actually confirms it from real data —
-      // otherwise show an honest "awaiting update" state rather than a fabricated live score.
       const ms=merge(m,new Date());
       if(ms.st==='LIVE'||ms.st==='HT'||ms.st==='FT'){
         clearInterval(countdownIntervals[id]);delete countdownIntervals[id];
@@ -835,27 +822,23 @@ function matchCard(m,now,forceMode){
   const isUp=mst.st==='NS';
   const grpLbl=m.group?'Group '+m.group:m.round||'';
 
-  // Header
   let hdR='';
   if(isLive)hdR=`<div class="mc-st"><span class="mc-st-live">${mst.st==='HT'?'HT':(mst.wc?.minute?mst.wc.minute+"'":'LIVE')}</span></div>`;
   else if(isFT)hdR=`<div class="mc-st"><span class="mc-st-ft">● FT</span></div>`;
   else hdR=`<div class="mc-st"><span class="mc-st-up">${m.dt?fmtDS(m.dt):''}</span></div>`;
 
-  // Center
   let center='';
   if(isLive){
     center=`<div class="mc-center"><div class="mc-score live">${mst.hs??'–'}–${mst.as??'–'}</div></div>`;
   } else if(isFT){
     center=`<div class="mc-center"><div class="mc-score ft">${mst.hs??m.hG??'–'}–${mst.as??m.aG??'–'}</div></div>`;
   } else {
-    // Countdown
     const diff=m.dt?m.dt-now:0;
     let cdHTML='';
     if(m.dt&&diff>0){
       const h=Math.floor(diff/3600000),mn=Math.floor(diff%3600000/60000),s=Math.floor(diff%60000/1000);
       cdHTML=`<div class="mc-cd" id="cd-${m.i}"><div class="mc-cd-time">${String(h).padStart(2,'0')}:${String(mn).padStart(2,'0')}:${String(s).padStart(2,'0')}</div><div class="mc-cd-lbl">Kick-off in</div><div class="mc-cd-kick">${lt(m.dt)}</div></div>`;
     } else if(m.dt){
-      // Kickoff time has passed but our free data source hasn't confirmed live/FT status yet.
       cdHTML=`<div class="mc-center"><div class="mc-vs" style="font-size:16px">⏳</div><div class="mc-cd-kick" style="color:var(--g2)">Kicked off · awaiting update</div></div>`;
     } else {
       cdHTML=`<div class="mc-center"><div class="mc-vs">vs</div><div class="mc-cd-kick">TBD</div></div>`;
@@ -863,7 +846,6 @@ function matchCard(m,now,forceMode){
     center=cdHTML;
   }
 
-  // Goals footer
   const g1=m.g1||[],g2=m.g2||[];
   let goalsHTML='';
   if(isFT&&(g1.length||g2.length)){
@@ -899,8 +881,6 @@ function renderToday(now){
     if(ms.st==='FT'){sc=`<div class="td-sc ft">${ms.hs??m.hG??'–'}–${ms.as??m.aG??'–'}</div>`;stEl=`<div class="td-st-ft">● FT</div>`;const gl=[...(m.g1||[]).map(g=>`${m.hf} ${g.name} ${g.minute}'`),...(m.g2||[]).map(g=>`${m.af} ${g.name} ${g.minute}'`)].join(' · ');if(gl)goalsEl=`<div class="td-goals">⚽ ${gl}</div>`;}
     else if(ms.st==='LIVE'||ms.st==='HT'){sc=`<div class="td-sc live">${ms.hs??'–'}–${ms.as??'–'}</div>`;stEl=`<div class="td-st-live">● ${ms.st==='HT'?'HT':(ms.min?ms.min+"'":'LIVE')}</div>`;}
     else if(kickedOff){
-      // Kickoff time has passed but our free data source hasn't confirmed a live score yet —
-      // say so honestly instead of showing a misleading "vs" as if it hasn't started.
       sc=`<div class="td-vs">⏳</div>`;
       stEl=`<div class="td-st-ns" style="color:var(--g2)">Kicked off · awaiting update</div>`;
     }
@@ -910,7 +890,6 @@ function renderToday(now){
     <div class="td-ctr">${sc}${stEl}</div><div class="td-team r"><span class="td-fl">${m.af}</span><span class="td-nm">${m.away}</span></div></div>
     <div class="td-ven">${m.venue}</div>${goalsEl}</div>`;
   }).join('');
-  // Next match countdown
   const next=OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt)[0];
   const nb=next?`<div class="cd-next-bar">⏱ Next: <b>${next.hf} ${next.home} vs ${next.away} ${next.af}</b> · ${lt(next.dt)} <b id="cd-next-bar" style="margin-left:auto;font-family:'JetBrains Mono',monospace"></b></div>`:'';
   return`<div class="today-wrap"><div class="today-hd"><h2>⚽ Today — ${fmtDL(now)}</h2><em>${tzLbl()}</em></div><div class="today-grid">${cards}</div>${nb}</div>`;
@@ -963,7 +942,6 @@ function renderResults(now){
 //  STANDINGS
 // ════════════════════════════════════════════════
 function getStandings(now){
-  // Try WCGRPS first — real schema: {group:"G", teams:[{team_id,pts,gf,ga}]}
   if(WCGRPS.length&&Object.keys(WC_TEAM_MAP).length){
     const R={};
     WCGRPS.forEach(g=>{
@@ -972,7 +950,6 @@ function getStandings(now){
       const gn='Group '+letter;
       const teams=g.teams||[];
       if(!Array.isArray(teams)||!teams.length)return;
-      // Compute W/D/L from games for this group since groups endpoint only has pts/gf/ga
       const wdl={};
       WCG.filter(m=>m.group===letter&&m.status==='FT'&&m.hs!==null).forEach(m=>{
         const hKey=m.home,aKey=m.away;
@@ -993,7 +970,6 @@ function getStandings(now){
     });
     if(Object.keys(R).length)return R;
   }
-  // Compute from OPF
   const G={};
   OPF.filter(m=>m.group&&!m.isKO).forEach(m=>{
     const g=m.group;if(!G[g])G[g]={};
@@ -1048,16 +1024,38 @@ function renderSchedule(now){
 //  LIVE TAB
 // ════════════════════════════════════════════════
 function renderLiveOnHome(now){
+  // PRIORITY 1: API-Football live matches
+  if (APIF_LIVE_MATCHES.length > 0) {
+    const n = APIF_LIVE_MATCHES.length;
+    const pill=document.getElementById('live-pill'),cnt=document.getElementById('live-cnt');
+    if(pill)pill.className='live-pill'+(n>0?' on':'');
+    if(cnt)cnt.textContent=n;
+
+    const cards = APIF_LIVE_MATCHES.map(m => {
+      // m has: home, away, hf, af, hs, as, minute, venue (maybe)
+      return `<div class="lmc">
+        <div class="lmc-hd"><span class="lmc-grp">Live</span><div class="lmc-status"><span class="lmc-dot"></span><span class="lmc-min">${m.minute || 'LIVE'}</span></div></div>
+        <div class="lmc-body">
+          <div class="lmc-fix">
+            <div class="lmc-team"><span class="lmc-fl">${m.hf}</span><span class="lmc-nm">${m.home}</span></div>
+            <div class="lmc-ctr"><div class="lmc-sc">${m.hs}–${m.as}</div></div>
+            <div class="lmc-team r"><span class="lmc-fl">${m.af}</span><span class="lmc-nm">${m.away}</span></div>
+          </div>
+          <div class="lmc-ven">${m.venue || 'World Cup'}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div style="margin-bottom:16px"><div class="section-label">🔴 Live Now</div><div class="live-grid">${cards}</div></div>`;
+  }
+
+  // FALLBACK: worldcup26.ir live matches
   const liveWC=WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const n=liveWC.length;
-  // Update header pill badge (kept as a small glance indicator even without a Live tab)
   const pill=document.getElementById('live-pill'),cnt=document.getElementById('live-cnt');
   if(pill)pill.className='live-pill'+(n>0?' on':'');
   if(cnt)cnt.textContent=n;
   if(!n){
-    // Honest fallback: if a match's kickoff has passed within the last ~2.5h and we still
-    // have no FT score for it either, it's likely in progress but our free data source
-    // (worldcup26.ir) hasn't confirmed it yet. Say so instead of showing nothing.
     const possiblyInProgress=OPF.filter(m=>{
       if(!m.dt||m.hG!==null)return false;
       const minsAgo=(now-m.dt)/60000;
@@ -1088,11 +1086,21 @@ function renderLiveOnHome(now){
 // ════════════════════════════════════════════════
 function renderTicker(now){
   const el=document.getElementById('tkr');if(!el)return;
-  const live=WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
+  // Prefer APIF live if available
+  let live = APIF_LIVE_MATCHES.length ? APIF_LIVE_MATCHES : WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const ft=WCG.filter(g=>g.status==='FT'&&g.hs!==null).slice(-6);
   const next=OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt).slice(0,3);
   let h='';
-  live.forEach(g=>h+=`<div class="ti"><span class="ti-live">LIVE</span><span>${g.hf} ${g.home}</span><span class="ti-sc">${g.hs??'–'}–${g.as??'–'}</span><span>${g.af} ${g.away}</span>${g.minute?`<span class="ti-min">${g.minute}'</span>`:''}</div>`);
+  live.forEach(g=>{
+    const home = g.home || g.homeName || '?';
+    const away = g.away || g.awayName || '?';
+    const hf = g.hf || fl(home);
+    const af = g.af || fl(away);
+    const hs = g.hs ?? g.homeScore ?? '–';
+    const as_ = g.as ?? g.awayScore ?? '–';
+    const min = g.minute || g.elapsed || '';
+    h+=`<div class="ti"><span class="ti-live">LIVE</span><span>${hf} ${home}</span><span class="ti-sc">${hs}–${as_}</span><span>${af} ${away}</span>${min?`<span class="ti-min">${min}'</span>`:''}</div>`;
+  });
   ft.forEach(g=>h+=`<div class="ti"><span class="ti-ft">FT</span><span>${g.hf} ${g.home}</span><span class="ti-sc">${g.hs}–${g.as}</span><span>${g.af} ${g.away}</span></div>`);
   next.forEach(m=>h+=`<div class="ti"><span class="ti-ns">NEXT</span><span>${m.hf} ${m.home} vs ${m.away} ${m.af}</span><span style="color:#555;font-size:9px">${lt(m.dt)}</span></div>`);
   if(!h)h=`<div class="ti" style="color:#555">${WCG.length||OPF.length} matches · refreshing…</div>`;
@@ -1172,6 +1180,60 @@ function startNextBarTimer(next){
 }
 
 // ════════════════════════════════════════════════
+//  FETCH LIVE FROM API-FOOTBALL (NEW)
+// ════════════════════════════════════════════════
+async function fetchLiveFromAPIFootball() {
+  try {
+    const response = await fetch(APIF_BASE + '/fixtures?live=all', {
+      headers: { 'x-apisports-key': APIF_KEY }
+    });
+    if (!response.ok) {
+      // If we get a 429 or 403, we've likely hit the daily limit
+      APIF_OK = false;
+      APIF_LAST_ERROR = 'HTTP ' + response.status;
+      APIF_LIVE_MATCHES = [];
+      return;
+    }
+    const data = await response.json();
+    const allMatches = data.response || [];
+    // Filter for World Cup (league id 1 or name contains "World Cup" and not clubs)
+    const wcMatches = allMatches.filter(match => {
+      if (!match.league) return false;
+      const leagueId = match.league.id;
+      const leagueName = (match.league.name || "").toUpperCase();
+      return (leagueId === 1 ||
+              (leagueName.includes("WORLD CUP") && !leagueName.includes("CLUBS")) ||
+              leagueName.includes("FIFA WORLD CUP"));
+    });
+
+    // Map to our internal structure
+    APIF_LIVE_MATCHES = wcMatches.map(m => {
+      const home = sn(m.teams.home.name);
+      const away = sn(m.teams.away.name);
+      return {
+        home: home,
+        away: away,
+        hf: fl(home),
+        af: fl(away),
+        hs: m.goals.home ?? 0,
+        as: m.goals.away ?? 0,
+        minute: m.fixture.status.elapsed || 'LIVE',
+        venue: m.fixture.venue?.name || '',
+        // keep raw for possible further use
+        _raw: m
+      };
+    });
+    APIF_OK = true;
+    APIF_LAST_ERROR = '';
+  } catch (err) {
+    console.warn('API-Football live fetch error:', err);
+    APIF_OK = false;
+    APIF_LAST_ERROR = err.message;
+    APIF_LIVE_MATCHES = [];
+  }
+}
+
+// ════════════════════════════════════════════════
 //  RENDER ALL
 // ════════════════════════════════════════════════
 function renderAll(){
@@ -1182,8 +1244,7 @@ function renderAll(){
   const ts=document.getElementById('today-sec');if(ts)ts.innerHTML=renderToday(now);
   // Home groups
   const hg=document.getElementById('home-grp');
-  if(hg){const played=Object.keys(S).filter(g=>S[g]?.some(t=>t.mp>0));hg.innerHTML=played.length?`<div style="margin-bottom:14px"><div class="sec-hd" style="margin-bottom:8px"><h2>Group Standings</h2><a href="#" onclick="go('groups',null);return false;" style="font-size:9px;font-weight:700;color:var(--g2);text-decoration:none;margin-left:auto">All 12 →</a></div><div class="gg">${played.map(g=>gcHTML(g,S[g],now)).join('')}</div></div>`:'';
-  }
+  if(hg){const played=Object.keys(S).filter(g=>S[g]?.some(t=>t.mp>0));hg.innerHTML=played.length?`<div style="margin-bottom:14px"><div class="sec-hd" style="margin-bottom:8px"><h2>Group Standings</h2><a href="#" onclick="go('groups',null);return false;" style="font-size:9px;font-weight:700;color:var(--g2);text-decoration:none;margin-left:auto">All 12 →</a></div><div class="gg">${played.map(g=>gcHTML(g,S[g],now)).join('')}</div></div>`:'';}
   // Other panels
   const ro=document.getElementById('results-out');if(ro)ro.innerHTML=renderResults(now);
   const ag=document.getElementById('all-grp');if(ag){const keys=Object.keys(S).sort();ag.innerHTML=keys.length?keys.map(g=>gcHTML(g,S[g],now)).join(''):'<div class="empty">No group data yet</div>';}
@@ -1195,7 +1256,7 @@ function renderAll(){
   // Status bar
   const dot=document.getElementById('sb-dot'),msg=document.getElementById('sb-msg');
   if(dot){dot.className='sb-dot';dot.style.background='var(--gr)';}
-  const liveCount=WCG.filter(g=>g.status==='LIVE'||g.status==='HT').length;
+  const liveCount = APIF_LIVE_MATCHES.length || WCG.filter(g=>g.status==='LIVE'||g.status==='HT').length;
   const pendingCount=OPF.filter(m=>{
     if(!m.dt||m.hG!==null)return false;
     const minsAgo=(now-m.dt)/60000;
@@ -1239,12 +1300,14 @@ async function refresh(){
   const dot=document.getElementById('sb-dot'),msg=document.getElementById('sb-msg');
   if(dot)dot.className='sb-dot go';if(msg)msg.textContent='Refreshing…';
   mainCd=30;
-  // Teams must resolve first — games/groups parsing needs WC_TEAM_MAP for names/flags
+  // Fetch APIF live matches (separate, but we do it in parallel with other fetches)
+  if (APIF_OK) {
+    await fetchLiveFromAPIFootball();
+  }
   if(!Object.keys(WC_TEAM_MAP).length){
     await fetchWCTeams();
   }
   const [wcgOk,wcgrpOk,opfOk]=await Promise.allSettled([fetchWCG(),fetchWCGroups(),fetchOPF()]);
-  // If teams failed to load before but games came back referencing unknown ids, retry once
   if(!Object.keys(WC_TEAM_MAP).length){
     await fetchWCTeams();
     if(Object.keys(WC_TEAM_MAP).length){
@@ -1252,30 +1315,29 @@ async function refresh(){
     }
   }
   renderAll();
-  renderDiag(wcgOk,wcgrpOk,opfOk);
 }
 
 // ════════════════════════════════════════════════
-//  DIAGNOSTICS — shows real fetch/API state so bugs
-//  can be confirmed from data instead of guessed.
+//  DIAGNOSTICS
 // ════════════════════════════════════════════════
 function renderDiag(wcgOk,wcgrpOk,opfOk){
   const el=document.getElementById('diag-panel');
   if(!el)return;
-  const liveCount=WCG.filter(g=>g.status==='LIVE'||g.status==='HT').length;
-  const sampleLive=WCG.find(g=>g.status==='LIVE'||g.status==='HT');
+  const liveCount=APIF_LIVE_MATCHES.length || WCG.filter(g=>g.status==='LIVE'||g.status==='HT').length;
+  const sampleLive=APIF_LIVE_MATCHES.length?APIF_LIVE_MATCHES[0]:WCG.find(g=>g.status==='LIVE'||g.status==='HT');
   const sampleAny=WCG[0];
   const tbdCount=WCG.filter(g=>g.home==='TBD'||g.away==='TBD').length;
   const lines=[
     `fetchWCG: ${wcgOk?.status} ${wcgOk?.value===false?'(returned false — see console)':''}`,
     `fetchWCGroups: ${wcgrpOk?.status}`,
     `fetchOPF: ${opfOk?.status}`,
-    `WCG entries: ${WCG.length} · WCGRPS entries: ${WCGRPS.length} · OPF entries: ${OPF.length}`,
-    `WC_TEAM_MAP entries: ${Object.keys(WC_TEAM_MAP).length}`,
-    `WCG games with TBD name: ${tbdCount}`,
-    `WCG live/HT count: ${liveCount}`,
-    sampleLive?`Sample live WCG: ${sampleLive.home} vs ${sampleLive.away} | status=${sampleLive.status} score=${sampleLive.hs}-${sampleLive.as} min=${sampleLive.minute}`:'Sample live WCG: none found',
-    sampleAny?`Sample WCG[0] raw-parsed: ${sampleAny.home} vs ${sampleAny.away} | status=${sampleAny.status} dt=${sampleAny.dt}`:'WCG is empty'
+    `WCG: ${WCG.length} · WCGRPS: ${WCGRPS.length} · OPF: ${OPF.length}`,
+    `WC_TEAM_MAP: ${Object.keys(WC_TEAM_MAP).length} entries`,
+    `WCG TBD names: ${tbdCount}`,
+    `APIF_LIVE_MATCHES: ${APIF_LIVE_MATCHES.length} (API-Football)`,
+    `Live count (total): ${liveCount}`,
+    sampleLive?`Sample live: ${sampleLive.home} vs ${sampleLive.away} | ${sampleLive.hs}-${sampleLive.as} ${sampleLive.minute}`:'No live match',
+    sampleAny?`Sample WCG[0]: ${sampleAny.home} vs ${sampleAny.away} | ${sampleAny.status}`:'WCG empty'
   ];
   el.textContent=lines.join('\n');
 }
@@ -1312,6 +1374,10 @@ function go(name,btn){
 // ════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════
+// Fetch APIF live on page load and every 2 minutes (to respect daily limit)
+fetchLiveFromAPIFootball();
+setInterval(fetchLiveFromAPIFootball, 120000);
+
 refresh();
 startCountdown();
 </script>
