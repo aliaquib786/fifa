@@ -326,29 +326,10 @@ tr.q3 td:first-child{border-left:3px solid var(--gold);}
 .srow-mins{margin-top:3px;display:flex;flex-wrap:wrap;gap:3px;}
 .srow-min{font-size:9px;background:var(--glt);color:var(--g2);padding:1px 5px;border-radius:3px;font-weight:700;}
 .srow-g{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;color:var(--g2);flex-shrink:0;}
-
-/* ── New Scorers Grid Layout ── */
-.scorers-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 24px;
-}
-.scorer-card {
-  background: var(--w);
-  border: 1px solid var(--ru);
-  border-radius: var(--r);
-  padding: 16px;
-  box-shadow: var(--sh);
-}
-.scorer-card .sec-hd {
-  margin-bottom: 12px;
-  border-bottom: 1px solid var(--ru);
-  padding-bottom: 8px;
-}
-.scorer-card .sec-hd h2 {
-  font-size: 14px;
-  margin: 0;
-}
+.scorers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px;}
+.scorer-card{background:var(--w);border:1px solid var(--ru);border-radius:var(--r);padding:16px;box-shadow:var(--sh);}
+.scorer-card .sec-hd{margin-bottom:12px;border-bottom:1px solid var(--ru);padding-bottom:8px;}
+.scorer-card .sec-hd h2{font-size:14px;margin:0;}
 @media(max-width:480px){.scorers-grid{grid-template-columns:1fr;}}
 
 /* ═══ BRACKET ═══ */
@@ -579,12 +560,8 @@ const WC_GAMES_URL  = 'https://worldcup26.ir/get/games';
 const WC_GROUPS_URL = 'https://worldcup26.ir/get/groups';
 const WC_TEAMS_URL  = 'https://worldcup26.ir/get/teams';
 const OPF_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/master/2026/worldcup.json';
-// API-Football — primary live-score source (free tier: 100 requests/day)
 const APIF_KEY    = 'c66a724ae6e19b5811224e82c6a2f99f';
 const APIF_BASE    = 'https://v3.football.api-sports.io';
-const APIF_LEAGUE  = 1;     // FIFA World Cup
-const APIF_SEASON  = 2026;
-const APIF_DAILY_LIMIT = 100;
 
 // ════════════════════════════════════════════════
 //  TIMEZONE
@@ -637,7 +614,6 @@ function sn(n){return SHORT[n]||n||'';}
 let WCG=[], WCGRPS=[], OPF=[];
 let WC_TEAM_MAP={};
 let APIF_OK=true;
-let APIF_LAST_ERROR='';
 let countdownIntervals={};
 let mainCd=30;
 const KO=new Set(['Round of 32','Round of 16','Quarter-final','Semi-final','Match for third place','Final']);
@@ -677,7 +653,7 @@ function parseOPF(raw,i){
 }
 
 // ════════════════════════════════════════════════
-//  MERGE: get live score/status for a match
+//  MERGE
 // ════════════════════════════════════════════════
 function normTeam(s){return (s||'').toLowerCase().replace(/[^a-z]/g,'');}
 function merge(m,now){
@@ -696,7 +672,7 @@ function merge(m,now){
 }
 
 // ════════════════════════════════════════════════
-//  PLAYER SEARCH INDEX — built from OPF goals
+//  PLAYER SEARCH INDEX
 // ════════════════════════════════════════════════
 function buildPlayerIndex(){
   const idx={};
@@ -715,6 +691,63 @@ function buildPlayerIndex(){
 //  SEARCH
 // ════════════════════════════════════════════════
 let searchQ='';
+
+function renderTeamStandings(teamName){
+  const now=new Date();
+  // Find the group of the team from OPF
+  let group = null;
+  for (const m of OPF) {
+    if (m.home === teamName || m.away === teamName) {
+      if (m.group) { group = m.group; break; }
+    }
+  }
+  if (!group) return '';
+  // Get standings for that group
+  const S = getStandings(now);
+  const groupKey = Object.keys(S).find(k => k.toLowerCase() === group.toLowerCase() || k.replace(/group\s*/i,'').trim() === group);
+  if (!groupKey || !S[groupKey] || !S[groupKey].length) return '';
+  // Build a simple table
+  const rows = S[groupKey];
+  const header = `Group ${groupKey.replace(/group\s*/i,'').trim()}`;
+  let html = `<div style="margin-bottom:16px;background:var(--gbg);border:1px solid var(--gold);border-radius:var(--r);padding:12px;">
+    <div style="font-size:10px;font-weight:800;letter-spacing:2px;text-transform:uppercase;color:var(--g2);margin-bottom:6px;">📊 ${header} Standings</div>
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:10px;min-width:200px;">
+        <thead>
+          <tr style="border-bottom:1px solid var(--ru);">
+            <th style="text-align:left;padding:4px 6px;font-weight:700;color:var(--mu);">Team</th>
+            <th style="text-align:center;padding:4px 6px;font-weight:700;color:var(--mu);">P</th>
+            <th style="text-align:center;padding:4px 6px;font-weight:700;color:var(--mu);">W</th>
+            <th style="text-align:center;padding:4px 6px;font-weight:700;color:var(--mu);">D</th>
+            <th style="text-align:center;padding:4px 6px;font-weight:700;color:var(--mu);">L</th>
+            <th style="text-align:center;padding:4px 6px;font-weight:700;color:var(--mu);" class="hx">GF</th>
+            <th style="text-align:center;padding:4px 6px;font-weight:700;color:var(--mu);" class="hx">GA</th>
+            <th style="text-align:center;padding:4px 6px;font-weight:700;color:var(--mu);">GD</th>
+            <th style="text-align:center;padding:4px 6px;font-weight:700;color:var(--mu);">Pts</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map(t => {
+            const gd = t.gd;
+            const isTeam = t.n === teamName;
+            return `<tr style="${isTeam?'background:var(--glt);font-weight:700;':''}border-bottom:1px solid var(--ru);">
+              <td style="padding:4px 6px;display:flex;align-items:center;gap:4px;"><span>${t.f}</span> ${t.n}</td>
+              <td style="text-align:center;padding:4px 6px;">${t.mp}</td>
+              <td style="text-align:center;padding:4px 6px;">${t.w}</td>
+              <td style="text-align:center;padding:4px 6px;">${t.d}</td>
+              <td style="text-align:center;padding:4px 6px;">${t.l}</td>
+              <td style="text-align:center;padding:4px 6px;" class="hx">${t.gf}</td>
+              <td style="text-align:center;padding:4px 6px;" class="hx">${t.ga}</td>
+              <td style="text-align:center;padding:4px 6px;color:${gd>0?'var(--gr)':gd<0?'var(--re)':'var(--fa)'};">${gd>0?'+'+gd:gd}</td>
+              <td style="text-align:center;padding:4px 6px;font-weight:700;color:var(--g2);">${t.pts}</td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>`;
+  return html;
+}
 
 function doSearch(q){
   searchQ=q.trim().toLowerCase();
@@ -770,11 +803,25 @@ function doSearch(q){
   if(!out)return;
   if(!results.length){out.innerHTML='<div class="empty">No matches found for "'+q+'"</div>';panel.className='on';return;}
 
+  // ── NEW: add standings for the searched team if it's a team name ──
+  let standingsHTML = '';
+  // check if searchQ matches any team name exactly or partially
+  const teamNames = OPF.reduce((acc, m) => { acc.add(m.home); acc.add(m.away); return acc; }, new Set());
+  let matchedTeam = null;
+  for (const t of teamNames) {
+    if (t.toLowerCase() === searchQ) { matchedTeam = t; break; }
+    if (t.toLowerCase().includes(searchQ)) { matchedTeam = t; break; } // prefer partial match
+  }
+  if (matchedTeam) {
+    standingsHTML = renderTeamStandings(matchedTeam);
+  }
+
   const live=results.filter(m=>{const s=merge(m,now);return s.st==='LIVE'||s.st==='HT';});
   const upcoming=results.filter(m=>{const s=merge(m,now);return s.st==='NS';}).sort((a,b)=>(a.dt||0)-(b.dt||0));
   const finished=results.filter(m=>{const s=merge(m,now);return s.st==='FT';}).sort((a,b)=>(b.dt||0)-(a.dt||0));
 
   let html='';
+  if (standingsHTML) html += standingsHTML;
   if(live.length){html+=`<div class="section-label" style="margin-top:4px">🔴 Live Now</div><div class="match-grid">${live.map(m=>matchCard(m,now,'live')).join('')}</div>`;}
   if(upcoming.length){html+=`<div class="section-label">⏱ Upcoming</div><div class="match-grid">${upcoming.map(m=>matchCard(m,now,'up')).join('')}</div>`;}
   if(finished.length){html+=`<div class="section-label">✅ Results</div>${renderResultList(finished,now)}`;}
@@ -804,7 +851,7 @@ document.getElementById('srch-inp').addEventListener('input',e=>doSearch(e.targe
 document.getElementById('srch-inp').addEventListener('keydown',e=>{if(e.key==='Escape')clearSearch();});
 
 // ════════════════════════════════════════════════
-//  COUNTDOWN TIMERS for upcoming match cards
+//  COUNTDOWN TIMERS
 // ════════════════════════════════════════════════
 function registerCountdown(m,now){
   const id='cd-'+m.i;
@@ -832,7 +879,7 @@ function registerCountdown(m,now){
 }
 
 // ════════════════════════════════════════════════
-//  MATCH CARD — unified card with countdown/live/ft
+//  MATCH CARD
 // ════════════════════════════════════════════════
 function matchCard(m,now,forceMode){
   const mst=merge(m,now);
@@ -888,7 +935,7 @@ function matchCard(m,now,forceMode){
 }
 
 // ════════════════════════════════════════════════
-//  HOME: TODAY MATCHES (compact banner)
+//  HOME: TODAY MATCHES
 // ════════════════════════════════════════════════
 function renderToday(now){
   const today=todayKey();
@@ -916,7 +963,7 @@ function renderToday(now){
 }
 
 // ════════════════════════════════════════════════
-//  HOME: UPCOMING CARDS (next 6 with countdowns)
+//  HOME: UPCOMING CARDS
 // ════════════════════════════════════════════════
 function renderUpcoming(now){
   const upcoming=OPF.filter(m=>{const ms=merge(m,now);return ms.st==='NS'&&m.dt&&m.dt>now;}).sort((a,b)=>a.dt-b.dt).slice(0,4);
@@ -1044,7 +1091,6 @@ function renderSchedule(now){
 //  LIVE TAB
 // ════════════════════════════════════════════════
 function renderLiveOnHome(now){
-  // PRIORITY 1: API-Football live matches
   if (APIF_LIVE_MATCHES.length > 0) {
     const n = APIF_LIVE_MATCHES.length;
     const pill=document.getElementById('live-pill'),cnt=document.getElementById('live-cnt');
@@ -1068,7 +1114,6 @@ function renderLiveOnHome(now){
     return `<div style="margin-bottom:16px"><div class="section-label">🔴 Live Now</div><div class="live-grid">${cards}</div></div>`;
   }
 
-  // FALLBACK: worldcup26.ir live matches
   const liveWC=WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const n=liveWC.length;
   const pill=document.getElementById('live-pill'),cnt=document.getElementById('live-cnt');
@@ -1141,7 +1186,6 @@ function renderScorers(now){
   return`<div class="scorer-list">${sorted.map((s,i)=>`<div class="srow"><div class="srow-rk ${i<3?'top':''}">${i+1}</div><div class="srow-fl">${s.tf}</div><div class="srow-inf"><div class="srow-nm">${s.name}</div><div class="srow-tm">${s.tf} ${s.team}</div><div class="srow-mins">${s.mins.map(m=>`<span class="srow-min">${m}'</span>`).join('')}</div></div><div class="srow-g">${s.goals}</div></div>`).join('')}</div>`;
 }
 
-// ── NEW: Golden Glove (Clean Sheets) ──
 function renderGoldenGlove(now) {
   const cleanSheets = {};
   OPF.filter(m => m.hG !== null).forEach(m => {
@@ -1229,7 +1273,6 @@ async function fetchLiveFromAPIFootball() {
     });
     if (!response.ok) {
       APIF_OK = false;
-      APIF_LAST_ERROR = 'HTTP ' + response.status;
       APIF_LIVE_MATCHES = [];
       return;
     }
@@ -1257,11 +1300,9 @@ async function fetchLiveFromAPIFootball() {
       };
     });
     APIF_OK = true;
-    APIF_LAST_ERROR = '';
   } catch (err) {
     console.warn('API-Football live fetch error:', err);
     APIF_OK = false;
-    APIF_LAST_ERROR = err.message;
     APIF_LIVE_MATCHES = [];
   }
 }
@@ -1280,8 +1321,6 @@ function renderAll(){
   const ag=document.getElementById('all-grp');if(ag){const keys=Object.keys(S).sort();ag.innerHTML=keys.length?keys.map(g=>gcHTML(g,S[g],now)).join(''):'<div class="empty">No group data yet</div>';}
   const sc=document.getElementById('sched-out');if(sc)sc.innerHTML=OPF.length?renderSchedule(now):'<div class="empty">Loading…</div>';
   const br=document.getElementById('bracket-out');if(br)br.innerHTML=renderBracket(now);
-  
-  // ── Scorers: two cards ──
   const so=document.getElementById('scorers-out');
   if (so) {
     const bootHTML = renderScorers(now);
@@ -1299,7 +1338,6 @@ function renderAll(){
       </div>
     `;
   }
-
   const st=document.getElementById('stats-out');if(st)st.innerHTML=renderStats(now);
   renderTicker(now);
   const dot=document.getElementById('sb-dot'),msg=document.getElementById('sb-msg');
@@ -1379,6 +1417,9 @@ function startCountdown(){
 //  TAB
 // ════════════════════════════════════════════════
 function go(name,btn){
+  // ── NEW: clear search when switching tabs ──
+  clearSearch();
+
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.nav-d button,.nav-m button').forEach(b=>b.classList.remove('on'));
   const p=document.getElementById('pane-'+name);if(p)p.classList.add('on');
