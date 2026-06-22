@@ -6,7 +6,7 @@
 <title>FIFA World Cup 2026™ — Live</title>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
 <style>
-/* ── all styles (unchanged, but we removed .ti-sim and .mc-st-sim) ── */
+/* ── all styles (unchanged) ── */
 :root{
   --bg:#f7f6f1;--w:#fff;--gold:#c8a84b;--g2:#9c7916;
   --glt:#fdf0cc;--gbg:#fffbee;--ink:#16140b;
@@ -517,11 +517,13 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
 </div><!-- .page -->
 <footer><b style="color:var(--g2)">FIFA World Cup 2026™</b> · Live: ESPN + worldcup26.ir · Auto-refresh every 60s · Times in your timezone</footer>
 
+<!-- ─── MOBILE BOTTOM NAV (UPDATED: added Bracket) ─── -->
 <nav class="nav-m">
   <button class="on" onclick="go('home',this)"><span class="ni">🏠</span><span class="nl">Home</span></button>
   <button onclick="go('results',this)"><span class="ni">📋</span><span class="nl">Results</span></button>
   <button onclick="go('groups',this)"><span class="ni">📊</span><span class="nl">Groups</span></button>
   <button onclick="go('schedule',this)"><span class="ni">📅</span><span class="nl">Schedule</span></button>
+  <button onclick="go('bracket',this)"><span class="ni">🏆</span><span class="nl">Bracket</span></button>
   <button onclick="go('scorers',this)"><span class="ni">⚽</span><span class="nl">Scorers</span></button>
 </nav>
 
@@ -1197,9 +1199,7 @@ function renderLiveOnHome(now){
   const espnLive = ESPN_LIVE_MATCHES.filter(m=>m.status==='LIVE'||m.status==='HT');
   const wcgLive = WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
 
-  // Combine, no simulation
   const allLive = [...espnLive, ...wcgLive];
-  // Remove duplicates (if same match appears in both)
   const unique = [];
   const seen = new Set();
   allLive.forEach(m => {
@@ -1264,7 +1264,7 @@ function renderTicker(now){
 }
 
 // ════════════════════════════════════════════════
-//  SCORERS – FULL LISTS (no top‑5 limit)
+//  SCORERS – FULL LISTS
 // ════════════════════════════════════════════════
 function renderScorers(now){
   const S={};
