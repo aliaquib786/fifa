@@ -395,7 +395,7 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
       <span class="sch-chip" onclick="chipSearch('England')">🏴󠁧󠁢󠁥󠁮󠁧󠁿 England</span>
       <span class="sch-chip" onclick="chipSearch('Argentina')">🇦🇷 Argentina</span>
       <span class="sch-chip" onclick="chipSearch('Qatar')">🇶🇦 Qatar</span>
-      <span class="sch-chip" onclick="chipSearch('Saudi Arabia')">🇸🇦 Saudi Arabia</span>
+      <span class="sch-chip" onclick="chipSearch('Saudi Arabia')">🇸🇦 Saudi Arabia</span> 
     </div>
     <span class="search-results-count" id="srch-count"></span>
   </div>
@@ -517,7 +517,7 @@ footer{text-align:center;padding:12px;border-top:1px solid var(--ru);color:var(-
 </div><!-- .page -->
 <footer><b style="color:var(--g2)">FIFA World Cup 2026™</b> · Live: ESPN + worldcup26.ir · Auto-refresh every 60s · Times in your timezone</footer>
 
-<!-- ─── MOBILE BOTTOM NAV (UPDATED: added Bracket) ─── -->
+<!-- ─── MOBILE BOTTOM NAV ─── -->
 <nav class="nav-m">
   <button class="on" onclick="go('home',this)"><span class="ni">🏠</span><span class="nl">Home</span></button>
   <button onclick="go('results',this)"><span class="ni">📋</span><span class="nl">Results</span></button>
@@ -607,8 +607,7 @@ function parseWCG(g){
   const fin=g.finished==='TRUE'||g.finished===true||te==='finished';
   let dt=null;
   if(g.local_date){try{const[dp,tp]=g.local_date.split(' ');const[mm,dd,yyyy]=dp.split('/');const[hh,mi]=(tp||'12:00').split(':');dt=new Date(`${yyyy}-${mm}-${dd}T${hh}:${mi}:00Z`);}catch(e){}}
-  let status=fin?'FT':te==='halftime'?'HT':(te&&te!=='notstarted'&&te!=='finished')?'LIVE':'NS';
-  if(status==='NS'&&dt&&dt<=new Date()&&(new Date()-dt)<7200000)status='LIVE';
+  let status=fin?'FT':(te==='halftime'?'HT':(te&&te!=='notstarted'&&te!=='finished')?'LIVE':'NS');
   let minute=null;
   if(te.startsWith('running:'))minute=te.split(':')[1];
   else if(te==='halftime')minute='HT';
@@ -866,7 +865,11 @@ function doSearch(q){
   const wcgLive = WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const allLive = [...live, ...wcgLive];
   const upcoming=results.filter(m=>{const s=merge(m,now);return s.st==='NS';}).sort((a,b)=>(a.dt||0)-(b.dt||0));
-  const finished=results.filter(m=>{const s=merge(m,now);return s.st==='FT';}).sort((a,b)=>(b.dt||0)-(a.dt||0));
+  // ── FINISHED: only include if both scores exist and date is not future ──
+  const finished=results.filter(m=>{
+    const s=merge(m,now);
+    return s.st==='FT' && (s.hs !== null && s.as !== null) && m.dt && m.dt <= now;
+  }).sort((a,b)=>(b.dt||0)-(a.dt||0));
 
   let html='';
   if (standingsHTML) html += standingsHTML;
@@ -1078,7 +1081,7 @@ function renderUpcoming(now){
 }
 
 // ════════════════════════════════════════════════
-//  RESULTS
+//  RESULTS – FIXED: only finished matches with scores
 // ════════════════════════════════════════════════
 function renderResultList(list,now){
   const byDay={};
@@ -1105,7 +1108,11 @@ function renderResultList(list,now){
 }
 
 function renderResults(now){
-  const fin=OPF.filter(m=>{const ms=merge(m,now);return ms.st==='FT'&&(ms.hs!==null||m.hG!==null);}).sort((a,b)=>(b.dt||0)-(a.dt||0));
+  // Only include matches where status is FT and both scores exist, and the match has started (date not future)
+  const fin=OPF.filter(m=>{
+    const ms=merge(m,now);
+    return ms.st==='FT' && (ms.hs !== null && ms.as !== null) && m.dt && m.dt <= now;
+  }).sort((a,b)=>(b.dt||0)-(a.dt||0));
   if(!fin.length)return'<div class="empty">No results yet.</div>';
   return renderResultList(fin,now);
 }
