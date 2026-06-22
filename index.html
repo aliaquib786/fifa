@@ -598,15 +598,6 @@ const KO=new Set(['Round of 32','Round of 16','Quarter-final','Semi-final','Matc
 let ESPN_LIVE_MATCHES = [];
 let ESPN_OK = false;
 
-// ── Loading state ──
-let dataLoaded = {
-  espn: false,
-  opf: false,
-  wcg: false,
-  wcgrps: false,
-  teams: false
-};
-
 // ════════════════════════════════════════════════
 //  PARSE worldcup26.ir game
 // ════════════════════════════════════════════════
@@ -668,7 +659,6 @@ async function fetchLiveFromESPN() {
     if (!response.ok) {
       ESPN_OK = false;
       ESPN_LIVE_MATCHES = [];
-      dataLoaded.espn = true;
       return;
     }
     const data = await response.json();
@@ -676,7 +666,6 @@ async function fetchLiveFromESPN() {
     if (events.length === 0) {
       ESPN_LIVE_MATCHES = [];
       ESPN_OK = true;
-      dataLoaded.espn = true;
       return;
     }
 
@@ -731,12 +720,10 @@ async function fetchLiveFromESPN() {
 
     ESPN_LIVE_MATCHES = parsed;
     ESPN_OK = true;
-    dataLoaded.espn = true;
   } catch (err) {
     console.warn('ESPN fetch error:', err);
     ESPN_OK = false;
     ESPN_LIVE_MATCHES = [];
-    dataLoaded.espn = true;
   }
 }
 
@@ -1335,7 +1322,7 @@ function renderTicker(now){
 }
 
 // ════════════════════════════════════════════════
-//  SCORERS
+//  SCORERS – FULL LISTS (no top‑5 limit)
 // ════════════════════════════════════════════════
 function renderScorers(now){
   const S={};
@@ -1347,8 +1334,8 @@ function renderScorers(now){
   });
   const sorted=Object.values(S).sort((a,b)=>b.goals-a.goals);
   if(!sorted.length)return'<div class="empty">No scorers yet.</div>';
-  const top5 = sorted.slice(0, 5);
-  return`<div class="scorer-list">${top5.map((s,i)=>`<div class="srow"><div class="srow-rk ${i<3?'top':''}">${i+1}</div><div class="srow-fl">${s.tf}</div><div class="srow-inf"><div class="srow-nm">${s.name}</div><div class="srow-tm">${s.tf} ${s.team}</div><div class="srow-mins">${s.mins.map(m=>`<span class="srow-min">${m}'</span>`).join('')}</div></div><div class="srow-g">${s.goals}</div></div>`).join('')}</div>`;
+  // ── FULL LIST ──
+  return`<div class="scorer-list">${sorted.map((s,i)=>`<div class="srow"><div class="srow-rk ${i<3?'top':''}">${i+1}</div><div class="srow-fl">${s.tf}</div><div class="srow-inf"><div class="srow-nm">${s.name}</div><div class="srow-tm">${s.tf} ${s.team}</div><div class="srow-mins">${s.mins.map(m=>`<span class="srow-min">${m}'</span>`).join('')}</div></div><div class="srow-g">${s.goals}</div></div>`).join('')}</div>`;
 }
 
 function renderGoldenGlove(now) {
@@ -1363,8 +1350,8 @@ function renderGoldenGlove(now) {
   });
   const sorted = Object.entries(cleanSheets).sort((a, b) => b[1] - a[1]);
   if (sorted.length === 0) return '<div class="empty">No clean sheet data yet.</div>';
-  const top5 = sorted.slice(0, 5);
-  return `<div class="scorer-list">${top5.map(([team, cs], i) => `
+  // ── FULL LIST ──
+  return `<div class="scorer-list">${sorted.map(([team, cs], i) => `
     <div class="srow">
       <div class="srow-rk ${i<3?'top':''}">${i+1}</div>
       <div class="srow-fl">${fl(team)}</div>
@@ -1524,42 +1511,23 @@ async function fetchWCTeams(){
       map[id]={name,flag_emoji:fl(name),code:t.fifa_code||''};
     });
     WC_TEAM_MAP=map;
-    dataLoaded.teams = true;
     return true;
   }catch(e){console.warn('WC_TEAMS:',e.message);return false;}
 }
-async function fetchWCG(){try{const r=await fetch(WC_GAMES_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();const arr=Array.isArray(d)?d:(d.games||d.data||d.result||[]);WCG=arr.map(parseWCG);dataLoaded.wcg=true;return true;}catch(e){console.warn('WCG:',e.message);return false;}}
-async function fetchWCGroups(){try{const r=await fetch(WC_GROUPS_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();WCGRPS=Array.isArray(d)?d:(d.groups||d.data||d.result||[]);dataLoaded.wcgrps=true;return true;}catch(e){console.warn('WCGRPS:',e.message);return false;}}
-async function fetchOPF(){try{const r=await fetch(OPF_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(10000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();OPF=(d.matches||[]).map((m,i)=>parseOPF(m,i));dataLoaded.opf=true;return true;}catch(e){console.warn('OPF:',e.message);return false;}}
+async function fetchWCG(){try{const r=await fetch(WC_GAMES_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();const arr=Array.isArray(d)?d:(d.games||d.data||d.result||[]);WCG=arr.map(parseWCG);return true;}catch(e){console.warn('WCG:',e.message);return false;}}
+async function fetchWCGroups(){try{const r=await fetch(WC_GROUPS_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(8000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();WCGRPS=Array.isArray(d)?d:(d.groups||d.data||d.result||[]);return true;}catch(e){console.warn('WCGRPS:',e.message);return false;}}
+async function fetchOPF(){try{const r=await fetch(OPF_URL+'?_='+Date.now(),{signal:AbortSignal.timeout(10000)});if(!r.ok)throw new Error('HTTP '+r.status);const d=await r.json();OPF=(d.matches||[]).map((m,i)=>parseOPF(m,i));return true;}catch(e){console.warn('OPF:',e.message);return false;}}
 
 // ════════════════════════════════════════════════
-//  OPTIMISED LOADER – fires all fetches in parallel
+//  OPTIMISED LOADER
 // ════════════════════════════════════════════════
-let isFirstLoad = true;
-
 function loadAllData() {
-  // 1. Show skeleton immediately
   renderAll();
-  
-  // 2. Fire all fetches in parallel (non-blocking)
-  fetchLiveFromESPN().then(() => {
-    renderAll();
-  });
-  
-  fetchOPF().then(() => {
-    renderAll();
-    // After OPF loads, we can show upcoming/today
-  });
-  
-  // 3. Teams + WCG + Groups (chained)
+  fetchLiveFromESPN().then(() => renderAll());
+  fetchOPF().then(() => renderAll());
   fetchWCTeams().then(() => {
     return Promise.allSettled([fetchWCG(), fetchWCGroups()]);
-  }).then(() => {
-    renderAll();
-  });
-  
-  // 4. Second render after ESPN completes (in case it was slow)
-  // (already handled above)
+  }).then(() => renderAll());
 }
 
 // ════════════════════════════════════════════════
@@ -1574,7 +1542,6 @@ function startCountdown(){
     const e1=document.getElementById('main-cd');
     if(e1)e1.textContent=`↻ ${mainCd}s`;
     if(mainCd<=0){
-      // Refresh all data in background
       fetchLiveFromESPN().then(() => renderAll());
       fetchOPF().then(() => renderAll());
       if (!Object.keys(WC_TEAM_MAP).length) {
@@ -1608,15 +1575,8 @@ function go(name,btn){
 //  INIT
 // ════════════════════════════════════════════════
 
-// Render the page skeleton immediately
 renderAll();
-
-// Start loading data in parallel after a tiny delay to allow paint
-setTimeout(() => {
-  loadAllData();
-}, 50);
-
-// Start the countdown timer
+setTimeout(() => loadAllData(), 50);
 startCountdown();
 
 </script>
