@@ -615,23 +615,47 @@ function parseWCG(g){
 }
 
 // ════════════════════════════════════════════════
-//  PARSE openfootball
+//  PARSE openfootball – improved date handling
 // ════════════════════════════════════════════════
 function parseOPF(raw,i){
   const home=sn(raw.team1||'TBD'),away=sn(raw.team2||'TBD');
   const round=raw.round||'';
   let dt=null;
-  if(raw.date){try{if(!raw.time){dt=new Date(raw.date+'T12:00:00Z');}else{const m=raw.time.trim().match(/^(\d{1,2}):(\d{2})\s+UTC([+-]\d+)?$/i);if(m){const hh=parseInt(m[1]),mm=parseInt(m[2]),off=m[3]?parseInt(m[3]):0;const d=new Date(raw.date+'T00:00:00Z');d.setUTCHours(hh-off,mm,0,0);dt=d;}else dt=new Date(raw.date+'T12:00:00Z');}}catch(e){}}
+  if(raw.date){
+    try{
+      // Try to parse with time if available
+      if(raw.time){
+        // Format like "20:00 UTC+2" – we extract UTC offset
+        const timeStr = raw.time.trim();
+        const m = timeStr.match(/^(\d{1,2}):(\d{2})(?:\s*UTC([+-]\d+))?$/i);
+        if(m){
+          const hh = parseInt(m[1]);
+          const mm = parseInt(m[2]);
+          const off = m[3] ? parseInt(m[3]) : 0;
+          const d = new Date(raw.date + 'T00:00:00Z');
+          d.setUTCHours(hh - off, mm, 0, 0);
+          dt = d;
+        } else {
+          // fallback: ignore time and use midday
+          dt = new Date(raw.date + 'T12:00:00Z');
+        }
+      } else {
+        dt = new Date(raw.date + 'T12:00:00Z');
+      }
+    } catch(e){
+      dt = null;
+    }
+  }
   return{i,home,away,hf:fl(home),af:fl(away),hG:raw.score?.ft?.[0]??null,aG:raw.score?.ft?.[1]??null,htH:raw.score?.ht?.[0]??null,htA:raw.score?.ht?.[1]??null,dt,round,group:raw.group||'',isKO:KO.has(round),venue:raw.ground||'',g1:raw.goals1||[],g2:raw.goals2||[]};
 }
 
 // ════════════════════════════════════════════════
-//  MERGE – FIXED to only show FT if match is genuinely finished
+//  MERGE – FIXED: never show FT for future matches
 // ════════════════════════════════════════════════
 function normTeam(s){return (s||'').toLowerCase().replace(/[^a-z]/g,'');}
 function merge(m,now){
-  const mh=normTeam(m.home), ma=normTeam(m.away);
   // 1. Try WCG first
+  const mh=normTeam(m.home), ma=normTeam(m.away);
   const wc=WCG.find(g=>{
     const gh=normTeam(g.home), ga=normTeam(g.away);
     if(!gh||!ga||gh==='tbd'||ga==='tbd')return false;
@@ -641,19 +665,22 @@ function merge(m,now){
   });
   if(wc)return{st:wc.status,hs:wc.hs,as:wc.as,min:wc.minute,wc,isSim:false};
 
-  // 2. If OPF has scores, only treat as FT if the match date is in the past AND we have scores
-  //    and the match is not in the future (i.e., it has genuinely finished)
+  // 2. If date is in the future, never show FT
+  if(m.dt && m.dt > now) {
+    return {st:'NS', hs:null, as:null, isSim:false};
+  }
+
+  // 3. If OPF has scores, only treat as FT if the match date is in the past AND likely finished
   if(m.hG !== null && m.dt) {
     const diff = now - m.dt;
-    // Consider FT only if the match started at least 2.5 hours ago (realistic finish) OR if the round is "Final" etc.
+    // Consider FT only if the match started at least 2.5 hours ago (realistic finish)
     const isLikelyFinished = diff > 2.5 * 60 * 60 * 1000;
     if(isLikelyFinished) {
       return{st:'FT',hs:m.hG,as:m.aG,isSim:false};
     }
   }
 
-  // 3. Otherwise, treat as not started (NS) – even if OPF has placeholder scores
-  if(!m.dt)return{st:'NS',isSim:false};
+  // 4. Otherwise, treat as not started (NS)
   return{st:'NS',isSim:false};
 }
 
@@ -1093,7 +1120,7 @@ function renderUpcoming(now){
 }
 
 // ════════════════════════════════════════════════
-//  RESULTS – FIXED: only finished matches with scores
+//  RESULTS – only finished matches with scores
 // ════════════════════════════════════════════════
 function renderResultList(list,now){
   const byDay={};
@@ -1120,7 +1147,6 @@ function renderResultList(list,now){
 }
 
 function renderResults(now){
-  // Only include matches where status is FT and both scores exist, and the match has started (date not future)
   const fin=OPF.filter(m=>{
     const ms=merge(m,now);
     return ms.st==='FT' && (ms.hs !== null && ms.as !== null) && m.dt && m.dt <= now;
@@ -1189,7 +1215,7 @@ function gcHTML(g,rows,now){
 }
 
 // ════════════════════════════════════════════════
-//  SCHEDULE
+//  SCHEDULE – uses the same merge logic, so future matches show NS
 // ════════════════════════════════════════════════
 function renderSchedule(now){
   const byDay={};OPF.forEach(m=>{if(!m.dt)return;const k=localDay(m.dt);if(!byDay[k])byDay[k]=[];byDay[k].push(m);});
