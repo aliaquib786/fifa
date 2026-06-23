@@ -650,7 +650,7 @@ function parseOPF(raw,i){
 }
 
 // ════════════════════════════════════════════════
-//  MERGE – FIXED: never show FT for future matches
+//  MERGE – STRICT: future matches always NS
 // ════════════════════════════════════════════════
 function normTeam(s){return (s||'').toLowerCase().replace(/[^a-z]/g,'');}
 function merge(m,now){
@@ -665,23 +665,20 @@ function merge(m,now){
   });
   if(wc)return{st:wc.status,hs:wc.hs,as:wc.as,min:wc.minute,wc,isSim:false};
 
-  // 2. If date is in the future, never show FT
-  if(m.dt && m.dt > now) {
-    return {st:'NS', hs:null, as:null, isSim:false};
+  // 2. If no date, treat as NS
+  if(!m.dt) return {st:'NS'};
+
+  // 3. If date is in the future (allow 1 hour grace for timezone) -> NS
+  const diff = m.dt - now;
+  if (diff > 0) return {st:'NS'};
+
+  // 4. If date is past and we have scores and diff < -2.5h -> FT
+  if(m.hG !== null && diff < -2.5*60*60*1000) {
+    return{st:'FT',hs:m.hG,as:m.aG,isSim:false};
   }
 
-  // 3. If OPF has scores, only treat as FT if the match date is in the past AND likely finished
-  if(m.hG !== null && m.dt) {
-    const diff = now - m.dt;
-    // Consider FT only if the match started at least 2.5 hours ago (realistic finish)
-    const isLikelyFinished = diff > 2.5 * 60 * 60 * 1000;
-    if(isLikelyFinished) {
-      return{st:'FT',hs:m.hG,as:m.aG,isSim:false};
-    }
-  }
-
-  // 4. Otherwise, treat as not started (NS)
-  return{st:'NS',isSim:false};
+  // 5. Otherwise NS
+  return{st:'NS'};
 }
 
 // ════════════════════════════════════════════════
