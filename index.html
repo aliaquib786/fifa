@@ -626,11 +626,12 @@ function parseOPF(raw,i){
 }
 
 // ════════════════════════════════════════════════
-//  MERGE
+//  MERGE – FIXED to only show FT if match is genuinely finished
 // ════════════════════════════════════════════════
 function normTeam(s){return (s||'').toLowerCase().replace(/[^a-z]/g,'');}
 function merge(m,now){
   const mh=normTeam(m.home), ma=normTeam(m.away);
+  // 1. Try WCG first
   const wc=WCG.find(g=>{
     const gh=normTeam(g.home), ga=normTeam(g.away);
     if(!gh||!ga||gh==='tbd'||ga==='tbd')return false;
@@ -639,7 +640,19 @@ function merge(m,now){
     return homeMatch && awayMatch;
   });
   if(wc)return{st:wc.status,hs:wc.hs,as:wc.as,min:wc.minute,wc,isSim:false};
-  if(m.hG!==null)return{st:'FT',hs:m.hG,as:m.aG,isSim:false};
+
+  // 2. If OPF has scores, only treat as FT if the match date is in the past AND we have scores
+  //    and the match is not in the future (i.e., it has genuinely finished)
+  if(m.hG !== null && m.dt) {
+    const diff = now - m.dt;
+    // Consider FT only if the match started at least 2.5 hours ago (realistic finish) OR if the round is "Final" etc.
+    const isLikelyFinished = diff > 2.5 * 60 * 60 * 1000;
+    if(isLikelyFinished) {
+      return{st:'FT',hs:m.hG,as:m.aG,isSim:false};
+    }
+  }
+
+  // 3. Otherwise, treat as not started (NS) – even if OPF has placeholder scores
   if(!m.dt)return{st:'NS',isSim:false};
   return{st:'NS',isSim:false};
 }
@@ -865,7 +878,6 @@ function doSearch(q){
   const wcgLive = WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const allLive = [...live, ...wcgLive];
   const upcoming=results.filter(m=>{const s=merge(m,now);return s.st==='NS';}).sort((a,b)=>(a.dt||0)-(b.dt||0));
-  // ── FINISHED: only include if both scores exist and date is not future ──
   const finished=results.filter(m=>{
     const s=merge(m,now);
     return s.st==='FT' && (s.hs !== null && s.as !== null) && m.dt && m.dt <= now;
