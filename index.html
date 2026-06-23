@@ -615,34 +615,31 @@ function parseWCG(g){
 }
 
 // ════════════════════════════════════════════════
-//  PARSE openfootball – improved date handling
+//  PARSE openfootball – FIXED: handles UTC offsets
 // ════════════════════════════════════════════════
 function parseOPF(raw,i){
   const home=sn(raw.team1||'TBD'),away=sn(raw.team2||'TBD');
   const round=raw.round||'';
   let dt=null;
   if(raw.date){
-    try{
-      // Try to parse with time if available
-      if(raw.time){
-        // Format like "20:00 UTC+2" – we extract UTC offset
-        const timeStr = raw.time.trim();
-        const m = timeStr.match(/^(\d{1,2}):(\d{2})(?:\s*UTC([+-]\d+))?$/i);
-        if(m){
-          const hh = parseInt(m[1]);
-          const mm = parseInt(m[2]);
-          const off = m[3] ? parseInt(m[3]) : 0;
-          const d = new Date(raw.date + 'T00:00:00Z');
-          d.setUTCHours(hh - off, mm, 0, 0);
-          dt = d;
-        } else {
-          // fallback: ignore time and use midday
-          dt = new Date(raw.date + 'T12:00:00Z');
+    try {
+      const dateStr = raw.date; // "2026-06-30"
+      const timeStr = raw.time ? raw.time.trim() : null; // "20:00 UTC+2" or "20:00"
+      let hours = 12, minutes = 0, offset = 0;
+      if (timeStr) {
+        const timeMatch = timeStr.match(/^(\d{1,2}):(\d{2})(?:\s*UTC([+-]\d+))?$/i);
+        if (timeMatch) {
+          hours = parseInt(timeMatch[1]);
+          minutes = parseInt(timeMatch[2]);
+          if (timeMatch[3]) {
+            offset = parseInt(timeMatch[3]);
+          }
         }
-      } else {
-        dt = new Date(raw.date + 'T12:00:00Z');
       }
-    } catch(e){
+      const d = new Date(dateStr + 'T00:00:00Z');
+      d.setUTCHours(hours - offset, minutes, 0, 0);
+      dt = d;
+    } catch(e) {
       dt = null;
     }
   }
@@ -650,11 +647,17 @@ function parseOPF(raw,i){
 }
 
 // ════════════════════════════════════════════════
-//  MERGE – STRICT: future matches always NS
+//  MERGE – FIXED: future matches never show scores
 // ════════════════════════════════════════════════
 function normTeam(s){return (s||'').toLowerCase().replace(/[^a-z]/g,'');}
 function merge(m,now){
-  // 1. Try WCG first
+  // 1. If no date, we can't know status -> NS
+  if (!m.dt) return {st:'NS', hs:null, as:null, isSim:false};
+
+  // 2. If date is in the future -> ALWAYS NS (never show score)
+  if (m.dt > now) return {st:'NS', hs:null, as:null, isSim:false};
+
+  // 3. Check WCG for live/FT status
   const mh=normTeam(m.home), ma=normTeam(m.away);
   const wc=WCG.find(g=>{
     const gh=normTeam(g.home), ga=normTeam(g.away);
@@ -665,20 +668,17 @@ function merge(m,now){
   });
   if(wc)return{st:wc.status,hs:wc.hs,as:wc.as,min:wc.minute,wc,isSim:false};
 
-  // 2. If no date, treat as NS
-  if(!m.dt) return {st:'NS'};
-
-  // 3. If date is in the future (allow 1 hour grace for timezone) -> NS
-  const diff = m.dt - now;
-  if (diff > 0) return {st:'NS'};
-
-  // 4. If date is past and we have scores and diff < -2.5h -> FT
-  if(m.hG !== null && diff < -2.5*60*60*1000) {
-    return{st:'FT',hs:m.hG,as:m.aG,isSim:false};
+  // 4. If date is past and we have scores, check if likely finished
+  if(m.hG !== null) {
+    const diff = now - m.dt;
+    const isLikelyFinished = diff > 2.5 * 60 * 60 * 1000;
+    if(isLikelyFinished) {
+      return{st:'FT',hs:m.hG,as:m.aG,isSim:false};
+    }
   }
 
-  // 5. Otherwise NS
-  return{st:'NS'};
+  // 5. Otherwise, not started
+  return{st:'NS',isSim:false};
 }
 
 // ════════════════════════════════════════════════
@@ -966,7 +966,7 @@ function registerCountdown(m,now){
 }
 
 // ════════════════════════════════════════════════
-//  GENERIC MATCH CARD (supports ESPN and WCG only)
+//  GENERIC MATCH CARD
 // ════════════════════════════════════════════════
 function matchCardGeneric(m,now,forceMode){
   const isESPN = m.isESPN || false;
@@ -1117,7 +1117,7 @@ function renderUpcoming(now){
 }
 
 // ════════════════════════════════════════════════
-//  RESULTS – only finished matches with scores
+//  RESULTS
 // ════════════════════════════════════════════════
 function renderResultList(list,now){
   const byDay={};
@@ -1212,7 +1212,7 @@ function gcHTML(g,rows,now){
 }
 
 // ════════════════════════════════════════════════
-//  SCHEDULE – uses the same merge logic, so future matches show NS
+//  SCHEDULE
 // ════════════════════════════════════════════════
 function renderSchedule(now){
   const byDay={};OPF.forEach(m=>{if(!m.dt)return;const k=localDay(m.dt);if(!byDay[k])byDay[k]=[];byDay[k].push(m);});
@@ -1235,12 +1235,11 @@ function renderSchedule(now){
 }
 
 // ════════════════════════════════════════════════
-//  LIVE – ONLY REAL ESPN + WCG
+//  LIVE
 // ════════════════════════════════════════════════
 function renderLiveOnHome(now){
   const espnLive = ESPN_LIVE_MATCHES.filter(m=>m.status==='LIVE'||m.status==='HT');
   const wcgLive = WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
-
   const allLive = [...espnLive, ...wcgLive];
   const unique = [];
   const seen = new Set();
@@ -1251,32 +1250,23 @@ function renderLiveOnHome(now){
       unique.push(m);
     }
   });
-
   const n = unique.length;
   const pill=document.getElementById('live-pill'),cnt=document.getElementById('live-cnt');
   if(pill)pill.className='live-pill'+(n>0?' on':'');
   if(cnt)cnt.textContent=n;
-
-  if(!n){
-    return'';
-  }
-
-  const cards = unique.map(g=>{
-    return matchCardGeneric(g,now,'live');
-  }).join('');
-
+  if(!n) return '';
+  const cards = unique.map(g=>matchCardGeneric(g,now,'live')).join('');
   const source = espnLive.length ? 'ESPN' : (wcgLive.length ? 'worldcup26' : '');
   return`<div style="margin-bottom:16px"><div class="section-label">🔴 Live Now${espnLive.length ? ' (ESPN)' : wcgLive.length ? ' (worldcup26)' : ''}</div><div class="live-grid">${cards}</div></div>`;
 }
 
 // ════════════════════════════════════════════════
-//  TICKER – ONLY REAL LIVE
+//  TICKER
 // ════════════════════════════════════════════════
 function renderTicker(now){
   const el=document.getElementById('tkr');if(!el)return;
   const espnLive = ESPN_LIVE_MATCHES.filter(m=>m.status==='LIVE'||m.status==='HT');
   const wcgLive = WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
-
   const allLive = [...espnLive, ...wcgLive];
   const unique = [];
   const seen = new Set();
@@ -1287,16 +1277,13 @@ function renderTicker(now){
       unique.push(m);
     }
   });
-
   const ft=WCG.filter(g=>g.status==='FT'&&g.hs!==null).slice(-6);
   const next=OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt).slice(0,3);
   let h='';
   unique.forEach(g=>{
     const isESPN = g.isESPN||false;
     const home = g.home, away=g.away, hf=g.hf, af=g.af, hs=g.hs??'–', as_=g.as??'–', min=g.minute||'';
-    let label = '';
-    if(isESPN) label = '<span class="ti-espn">ESPN</span>';
-    else label = '<span class="ti-live">LIVE</span>';
+    let label = isESPN ? '<span class="ti-espn">ESPN</span>' : '<span class="ti-live">LIVE</span>';
     h+=`<div class="ti">${label}<span>${hf} ${home}</span><span class="ti-sc">${hs}–${as_}</span><span>${af} ${away}</span>${min?`<span class="ti-min">${min}'</span>`:''}</div>`;
   });
   ft.forEach(g=>h+=`<div class="ti"><span class="ti-ft">FT</span><span>${g.hf} ${g.home}</span><span class="ti-sc">${g.hs}–${g.as}</span><span>${g.af} ${g.away}</span></div>`);
@@ -1306,7 +1293,7 @@ function renderTicker(now){
 }
 
 // ════════════════════════════════════════════════
-//  SCORERS – FULL LISTS
+//  SCORERS
 // ════════════════════════════════════════════════
 function renderScorers(now){
   const S={};
@@ -1539,7 +1526,6 @@ function startCountdown(){
 // ════════════════════════════════════════════════
 function go(name,btn){
   clearSearch();
-
   document.querySelectorAll('.pane').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.nav-d button,.nav-m button').forEach(b=>b.classList.remove('on'));
   const p=document.getElementById('pane-'+name);if(p)p.classList.add('on');
@@ -1554,11 +1540,9 @@ function go(name,btn){
 // ════════════════════════════════════════════════
 //  INIT
 // ════════════════════════════════════════════════
-
 renderAll();
 setTimeout(() => loadAllData(), 50);
 startCountdown();
-
 </script>
 </body>
 </html>
