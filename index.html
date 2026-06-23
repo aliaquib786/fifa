@@ -538,7 +538,7 @@ const OPF_URL = 'https://raw.githubusercontent.com/openfootball/worldcup.json/ma
 const ESPN_SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
 
 // ════════════════════════════════════════════════
-//  TIMEZONE
+//  TIMEZONE (auto-adjusted to user's location)
 // ════════════════════════════════════════════════
 const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 function tzLbl(){try{return new Date().toLocaleTimeString([],{timeZoneName:'short'}).split(' ').pop()||'';}catch(e){return '';}}
@@ -615,7 +615,7 @@ function parseWCG(g){
 }
 
 // ════════════════════════════════════════════════
-//  PARSE openfootball – FIXED: handles UTC offsets
+//  PARSE openfootball – handles UTC offsets
 // ════════════════════════════════════════════════
 function parseOPF(raw,i){
   const home=sn(raw.team1||'TBD'),away=sn(raw.team2||'TBD');
@@ -647,17 +647,13 @@ function parseOPF(raw,i){
 }
 
 // ════════════════════════════════════════════════
-//  MERGE – FIXED: future matches never show scores
+//  MERGE – strict: future matches never show scores
 // ════════════════════════════════════════════════
 function normTeam(s){return (s||'').toLowerCase().replace(/[^a-z]/g,'');}
 function merge(m,now){
-  // 1. If no date, we can't know status -> NS
   if (!m.dt) return {st:'NS', hs:null, as:null, isSim:false};
-
-  // 2. If date is in the future -> ALWAYS NS (never show score)
   if (m.dt > now) return {st:'NS', hs:null, as:null, isSim:false};
 
-  // 3. Check WCG for live/FT status
   const mh=normTeam(m.home), ma=normTeam(m.away);
   const wc=WCG.find(g=>{
     const gh=normTeam(g.home), ga=normTeam(g.away);
@@ -668,7 +664,6 @@ function merge(m,now){
   });
   if(wc)return{st:wc.status,hs:wc.hs,as:wc.as,min:wc.minute,wc,isSim:false};
 
-  // 4. If date is past and we have scores, check if likely finished
   if(m.hG !== null) {
     const diff = now - m.dt;
     const isLikelyFinished = diff > 2.5 * 60 * 60 * 1000;
@@ -676,8 +671,6 @@ function merge(m,now){
       return{st:'FT',hs:m.hG,as:m.aG,isSim:false};
     }
   }
-
-  // 5. Otherwise, not started
   return{st:'NS',isSim:false};
 }
 
@@ -745,7 +738,9 @@ async function fetchLiveFromESPN() {
         isESPN: true,
         isSim: false,
         dt: event.date ? new Date(event.date) : null,
-        _raw: event
+        _raw: event,
+        g1: [],  // will be filled from OPF in enrichWithGoals
+        g2: []
       });
     });
 
@@ -756,6 +751,26 @@ async function fetchLiveFromESPN() {
     ESPN_OK = false;
     ESPN_LIVE_MATCHES = [];
   }
+}
+
+// ─── Helper: enrich a live match with goal data from OPF ───
+function enrichWithGoals(liveMatch) {
+  if (!liveMatch || !OPF.length) return liveMatch;
+  // If already has goals, skip
+  if (liveMatch.g1 && liveMatch.g1.length) return liveMatch;
+  const mh = normTeam(liveMatch.home);
+  const ma = normTeam(liveMatch.away);
+  const opfMatch = OPF.find(m => {
+    const hm = normTeam(m.home);
+    const am = normTeam(m.away);
+    return (hm === mh || hm.includes(mh) || mh.includes(hm)) &&
+           (am === ma || am.includes(ma) || ma.includes(am));
+  });
+  if (opfMatch) {
+    liveMatch.g1 = opfMatch.g1 || [];
+    liveMatch.g2 = opfMatch.g2 || [];
+  }
+  return liveMatch;
 }
 
 // ════════════════════════════════════════════════
@@ -898,7 +913,7 @@ function doSearch(q){
     standingsHTML = renderTeamStandings(matchedTeam);
   }
 
-  const live = ESPN_LIVE_MATCHES.filter(m=>m.status==='LIVE' || m.status==='HT');
+  const live = ESPN_LIVE_MATCHES.filter(m=>m.status==='LIVE' || m.status==='HT').map(enrichWithGoals);
   const wcgLive = WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const allLive = [...live, ...wcgLive];
   const upcoming=results.filter(m=>{const s=merge(m,now);return s.st==='NS';}).sort((a,b)=>(a.dt||0)-(b.dt||0));
@@ -966,7 +981,7 @@ function registerCountdown(m,now){
 }
 
 // ════════════════════════════════════════════════
-//  GENERIC MATCH CARD
+//  GENERIC MATCH CARD – now shows goals (g1/g2)
 // ════════════════════════════════════════════════
 function matchCardGeneric(m,now,forceMode){
   const isESPN = m.isESPN || false;
@@ -986,8 +1001,7 @@ function matchCardGeneric(m,now,forceMode){
 
   let center='';
   if(isLive){
-    const scoreClass = isESPN ? 'live' : 'live';
-    center=`<div class="mc-center"><div class="mc-score ${scoreClass}">${m.hs??'–'}–${m.as??'–'}</div></div>`;
+    center=`<div class="mc-center"><div class="mc-score live">${m.hs??'–'}–${m.as??'–'}</div></div>`;
   } else {
     const diff=m.dt?m.dt-now:0;
     let cdHTML='';
@@ -1000,11 +1014,12 @@ function matchCardGeneric(m,now,forceMode){
     center=cdHTML;
   }
 
-  const g1=m.g1||[],g2=m.g2||[];
+  // Goals from g1/g2
+  const g1=m.g1||[], g2=m.g2||[];
   let goalsHTML='';
-  if(isLive && (g1.length||g2.length)){
-    const gl=[...g1.map(g=>`${m.hf} ${g.name} ${g.minute}'`),...g2.map(g=>`${m.af} ${g.name} ${g.minute}'`)].join(' · ');
-    if(gl)goalsHTML=`<div class="mc-goals">⚽ ${gl}</div>`;
+  if(isLive && (g1.length || g2.length)){
+    const gl=[...g1.map(g=>`${m.hf} ${g.name} ${g.minute}'`), ...g2.map(g=>`${m.af} ${g.name} ${g.minute}'`)].join(' · ');
+    if(gl) goalsHTML = `<div class="mc-goals">⚽ ${gl}</div>`;
   }
 
   let sourceLabel = '';
@@ -1235,10 +1250,10 @@ function renderSchedule(now){
 }
 
 // ════════════════════════════════════════════════
-//  LIVE
+//  LIVE – now enriches ESPN matches with goals from OPF
 // ════════════════════════════════════════════════
 function renderLiveOnHome(now){
-  const espnLive = ESPN_LIVE_MATCHES.filter(m=>m.status==='LIVE'||m.status==='HT');
+  const espnLive = ESPN_LIVE_MATCHES.filter(m=>m.status==='LIVE'||m.status==='HT').map(enrichWithGoals);
   const wcgLive = WCG.filter(g=>g.status==='LIVE'||g.status==='HT');
   const allLive = [...espnLive, ...wcgLive];
   const unique = [];
