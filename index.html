@@ -29,6 +29,10 @@
             --sh: 0 1px 3px rgba(0, 0, 0, .05), 0 3px 10px rgba(0, 0, 0, .06);
             --sh2: 0 4px 18px rgba(0, 0, 0, .11);
             --nh: 58px;
+            --ev-g: #156030;
+            --ev-p: #c8102e;
+            --ev-og: #be3120;
+            --ev-var: #1a6aaa;
         }
         * {
             margin: 0;
@@ -37,6 +41,7 @@
         }
         html {
             -webkit-tap-highlight-color: transparent;
+            scroll-behavior: smooth;
         }
         body {
             background: var(--bg);
@@ -52,7 +57,6 @@
             }
         }
 
-        /* ── header, nav, ticker, hero (unchanged) ── */
         .hdr {
             background: var(--w);
             border-bottom: 2.5px solid var(--gold);
@@ -646,7 +650,7 @@
             overflow: hidden;
             box-shadow: var(--sh);
             transition: box-shadow .15s, border-color .15s;
-            cursor: default;
+            cursor: pointer;
         }
         .mcard:hover {
             box-shadow: var(--sh2);
@@ -1034,6 +1038,8 @@
             align-items: center;
             gap: 8px;
             flex-wrap: wrap;
+            cursor: pointer;
+            transition: border-color .15s;
         }
         .res-card:hover {
             border-color: var(--gold);
@@ -1495,6 +1501,7 @@
             padding: 9px 11px;
             box-shadow: var(--sh);
             transition: border-color .15s;
+            cursor: pointer;
         }
         .mc-sched:hover {
             border-color: var(--gold);
@@ -2094,6 +2101,87 @@
         .glove-detail-list .srow-g {
             color: var(--sky);
         }
+
+        /* ── Today highlight in schedule ── */
+        #today-schedule .sday-hd {
+            background: var(--glt);
+            border-radius: 4px;
+            padding: 4px 8px;
+            border-bottom-color: var(--gold);
+        }
+        #today-schedule .sday-hd .t-today {
+            background: var(--gold);
+            color: var(--ink);
+        }
+
+        /* ── Match Summary Modal Events ── */
+        .match-event {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 6px 0;
+            border-bottom: 1px solid var(--ru);
+            font-size: 13px;
+        }
+        .match-event:last-child {
+            border-bottom: none;
+        }
+        .match-event .ev-minute {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            color: var(--mu);
+            min-width: 45px;
+            font-size: 12px;
+        }
+        .match-event .ev-icon {
+            font-size: 16px;
+            width: 24px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+        .match-event .ev-desc {
+            flex: 1;
+        }
+        .match-event .ev-team {
+            font-weight: 600;
+            margin-left: 6px;
+        }
+        .match-event .ev-extra {
+            font-size: 11px;
+            color: var(--mu);
+            margin-left: 6px;
+        }
+        .ev-goal .ev-icon { color: var(--ev-g); }
+        .ev-penalty .ev-icon { color: var(--ev-p); }
+        .ev-og .ev-icon { color: var(--ev-og); }
+        .ev-var .ev-icon { color: var(--ev-var); }
+        .ev-card .ev-icon { color: #f5a623; }
+        .ev-sub .ev-icon { color: #6c5b7b; }
+        .match-event.ev-ht {
+            background: var(--bg);
+            font-weight: 700;
+            text-align: center;
+            color: var(--mu);
+            border-bottom: 2px solid var(--ru);
+            padding: 6px 0;
+            font-size: 12px;
+        }
+        .match-event.ev-ft {
+            background: var(--gbg);
+            font-weight: 700;
+            text-align: center;
+            color: var(--g2);
+            border-bottom: none;
+            padding: 6px 0;
+            font-size: 12px;
+        }
+        .match-event.ev-card {
+            border-left: 3px solid #f5a623;
+        }
+        .match-event.ev-var-note {
+            border-left: 3px solid var(--ev-var);
+            background: var(--skyb);
+        }
     </style>
 </head>
 <body>
@@ -2294,6 +2382,22 @@
         </div>
     </div>
 
+    <!-- ─── MATCH SUMMARY MODAL ─── -->
+    <div class="modal-overlay" id="matchModal" onclick="if(event.target===this)closeMatchModal()">
+        <div class="modal-box">
+            <button class="modal-close" onclick="closeMatchModal()">×</button>
+            <div class="modal-title">
+                <span id="matchModalFlagHome"></span>
+                <span id="matchModalHome"></span>
+                <span style="font-size:16px;color:var(--fa);">vs</span>
+                <span id="matchModalAway"></span>
+                <span id="matchModalFlagAway"></span>
+            </div>
+            <div class="modal-sub" id="matchModalInfo"></div>
+            <div id="matchModalEvents" style="margin-top:8px;"></div>
+        </div>
+    </div>
+
     <script>
         // ════════════════════════════════════════════════
         //  APIS
@@ -2310,7 +2414,7 @@
         const TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
         function tzLbl() { try { return new Date().toLocaleTimeString([], { timeZoneName: 'short' }).split(' ').pop() || ''; } catch (
-            e) { return ''; } }
+                e) { return ''; } }
 
         function fmtT(d) { if (!d) return ''; return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: TZ,
                 hour12: false }); }
@@ -2406,7 +2510,7 @@
         };
 
         function fl(n) { if (!n) return '🏳️'; if (FLAGS[n]) return FLAGS[n]; for (const [k, v] of Object.entries(FLAGS))
-            if (n.toLowerCase().includes(k.toLowerCase())) return v; return '🏳️'; }
+                if (n.toLowerCase().includes(k.toLowerCase())) return v; return '🏳️'; }
         const SHORT = { 'Bosnia & Herzegovina': 'Bosnia', 'Czech Republic': 'Czechia', "Côte d'Ivoire": 'Ivory Coast',
             'Cabo Verde': 'Cape Verde', 'Congo DR': 'DR Congo' };
 
@@ -2540,8 +2644,7 @@
             'Jordan': 'Yazeed Abu Layla',
             'Curaçao': 'Eloy Room',
             'Curacao': 'Eloy Room',
-            'United States': 'Matt Turner',
-            'USA': 'Matt Turner'
+            'United States': 'Matt Turner'
         };
 
         function getGK(team) {
@@ -2561,7 +2664,7 @@
         const KO = new Set(['Round of 32', 'Round of 16', 'Quarter-final', 'Semi-final', 'Match for third place', 'Final']);
         let ESPN_LIVE_MATCHES = [];
         let ESPN_OK = false;
-        let GLOVE_DATA = {}; // for Golden Glove modal
+        let GLOVE_DATA = {};
 
         // ════════════════════════════════════════════════
         //  PARSE worldcup26.ir game
@@ -2625,10 +2728,12 @@
                     dt = null;
                 }
             }
+            // Store raw goals with all properties
+            const rawGoals1 = raw.goals1 || [];
+            const rawGoals2 = raw.goals2 || [];
             return { i, home, away, hf: fl(home), af: fl(away), hG: raw.score?.ft?.[0] ?? null, aG: raw.score?.ft?.[1] ??
                     null, htH: raw.score?.ht?.[0] ?? null, htA: raw.score?.ht?.[1] ?? null, dt, round, group: raw
-                    .group || '', isKO: KO.has(round), venue: raw.ground || '', g1: raw.goals1 || [], g2: raw
-                    .goals2 || [] };
+                    .group || '', isKO: KO.has(round), venue: raw.ground || '', g1: rawGoals1, g2: rawGoals2 };
         }
 
         // ════════════════════════════════════════════════
@@ -2778,7 +2883,7 @@
         }
 
         // ════════════════════════════════════════════════
-        //  SEARCH
+        //  SEARCH – FIXED: team search shows only matches involving that team
         // ════════════════════════════════════════════════
         let searchQ = '';
 
@@ -2855,15 +2960,51 @@
             const matchSet = new Set();
             const matchReasons = {};
 
+            // ── Build set of all team names from OPF ──
+            const allTeamNames = new Set();
+            OPF.forEach(m => { allTeamNames.add(m.home);
+                allTeamNames.add(m.away); });
+            WCG.forEach(g => { allTeamNames.add(g.home);
+                allTeamNames.add(g.away); });
+
+            // ── Check if search query is a team name (exact or partial) ──
+            let matchedTeam = null;
+            for (const t of allTeamNames) {
+                const lower = t.toLowerCase();
+                if (lower === searchQ || lower.includes(searchQ) || searchQ.includes(lower)) {
+                    matchedTeam = t;
+                    break;
+                }
+            }
+
+            // ── For team search: only matches where the team is playing ──
+            const isTeamSearch = matchedTeam !== null;
+
             OPF.forEach(m => {
                 const mr = [];
-                if (m.home.toLowerCase().includes(searchQ) || m.away.toLowerCase().includes(searchQ)) mr.push('team');
-                if (m.venue.toLowerCase().includes(searchQ)) mr.push('venue: ' + m.venue);
-                if (m.group.toLowerCase().includes(searchQ)) mr.push('group: ' + m.group);
-                if (mr.length) { matchSet.add(m.i);
-                    matchReasons[m.i] = (matchReasons[m.i] || []).concat(mr); }
+                const homeMatch = m.home.toLowerCase().includes(searchQ);
+                const awayMatch = m.away.toLowerCase().includes(searchQ);
+
+                if (isTeamSearch) {
+                    // Team search: only show matches involving this team
+                    if (homeMatch || awayMatch) {
+                        mr.push('team: ' + matchedTeam);
+                        matchSet.add(m.i);
+                        matchReasons[m.i] = (matchReasons[m.i] || []).concat(mr);
+                    }
+                } else {
+                    // Non-team search: existing logic (venue, group, player, etc.)
+                    if (homeMatch || awayMatch) mr.push('team');
+                    if (m.venue.toLowerCase().includes(searchQ)) mr.push('venue: ' + m.venue);
+                    if (m.group.toLowerCase().includes(searchQ)) mr.push('group: ' + m.group);
+                    if (mr.length) {
+                        matchSet.add(m.i);
+                        matchReasons[m.i] = (matchReasons[m.i] || []).concat(mr);
+                    }
+                }
             });
 
+            // ── Player search (always include) ──
             Object.entries(playerIdx).forEach(([key, pi]) => {
                 if (key.includes(searchQ) || pi.name.toLowerCase().includes(searchQ)) {
                     pi.matches.forEach(mi => {
@@ -2874,15 +3015,25 @@
                 }
             });
 
-            WCG.forEach(g => {
-                const wq = searchQ;
-                if (g.home.toLowerCase().includes(wq) || g.away.toLowerCase().includes(wq) || g.venue.toLowerCase()
-                    .includes(wq)) {
-                    const opfM = OPF.find(m => normTeam(m.home) === normTeam(g.home) || normTeam(m.home).includes(
-                        normTeam(g.home)) || normTeam(g.home).includes(normTeam(m.home)));
-                    if (opfM) { matchSet.add(opfM.i); if (!matchReasons[opfM.i]) matchReasons[opfM.i] = []; }
-                }
-            });
+            // ── Also check WCG for team matches ──
+            if (isTeamSearch) {
+                WCG.forEach(g => {
+                    if (g.home.toLowerCase().includes(searchQ) || g.away.toLowerCase().includes(searchQ)) {
+                        const opfM = OPF.find(m => normTeam(m.home) === normTeam(g.home) || normTeam(m.home)
+                            .includes(normTeam(g.home)) || normTeam(g.home).includes(normTeam(m.home)));
+                        if (opfM) { matchSet.add(opfM.i); if (!matchReasons[opfM.i]) matchReasons[opfM.i] = []; }
+                    }
+                });
+            } else {
+                WCG.forEach(g => {
+                    if (g.home.toLowerCase().includes(searchQ) || g.away.toLowerCase().includes(searchQ) || g
+                        .venue.toLowerCase().includes(searchQ)) {
+                        const opfM = OPF.find(m => normTeam(m.home) === normTeam(g.home) || normTeam(m.home)
+                            .includes(normTeam(g.home)) || normTeam(g.home).includes(normTeam(m.home)));
+                        if (opfM) { matchSet.add(opfM.i); if (!matchReasons[opfM.i]) matchReasons[opfM.i] = []; }
+                    }
+                });
+            }
 
             const results = OPF.filter(m => matchSet.has(m.i)).sort((a, b) => (a.dt || 0) - (b.dt || 0));
             cnt.textContent = results.length + ' match' + (results.length !== 1 ? 'es' : '');
@@ -2898,13 +3049,6 @@
                 panel.className = 'on'; return; }
 
             let standingsHTML = '';
-            const teamNames = OPF.reduce((acc, m) => { acc.add(m.home);
-                acc.add(m.away); return acc; }, new Set());
-            let matchedTeam = null;
-            for (const t of teamNames) {
-                if (t.toLowerCase() === searchQ) { matchedTeam = t; break; }
-                if (t.toLowerCase().includes(searchQ)) { matchedTeam = t; break; }
-            }
             if (matchedTeam) {
                 standingsHTML = renderTeamStandings(matchedTeam);
             }
@@ -2990,9 +3134,202 @@
         }
 
         // ════════════════════════════════════════════════
-        //  GENERIC MATCH CARD – now shows goals (g1/g2)
+        //  MATCH SUMMARY MODAL – enhanced with detailed events
         // ════════════════════════════════════════════════
-        function matchCardGeneric(m, now, forceMode) {
+        function showMatchSummary(matchIndex) {
+            const m = OPF[matchIndex];
+            if (!m) return;
+            const now = new Date();
+            const ms = merge(m, now);
+            const hs = ms.hs ?? m.hG;
+            const as_ = ms.as ?? m.aG;
+            const isFT = ms.st === 'FT' || (hs !== null && as_ !== null);
+
+            document.getElementById('matchModalFlagHome').textContent = m.hf;
+            document.getElementById('matchModalHome').textContent = m.home;
+            document.getElementById('matchModalAway').textContent = m.away;
+            document.getElementById('matchModalFlagAway').textContent = m.af;
+            document.getElementById('matchModalInfo').textContent =
+                `${m.group ? 'Group '+m.group : m.round || ''} · ${m.venue} · ${m.dt ? fmtT(m.dt)+' '+tzLbl() : ''}`;
+
+            // Build events from goals
+            const events = [];
+            // Home goals
+            (m.g1 || []).forEach(g => {
+                const isPen = g.penalty === true || (g.name && g.name.includes('PEN'));
+                const isOG = g.own_goal === true || (g.name && g.name.includes('OG'));
+                const isVar = g.var === true || (g.name && g.name.includes('VAR')) || (g.var_note && g.var_note ===
+                    'disallowed');
+                const isMissed = g.missed === true || (g.name && g.name.includes('MISSED'));
+                events.push({
+                    minute: g.minute,
+                    type: 'goal',
+                    team: 'home',
+                    player: g.name,
+                    isPen: isPen,
+                    isOG: isOG,
+                    isVar: isVar,
+                    isMissed: isMissed,
+                    extra: isPen ? 'PEN' : (isOG ? 'OG' : (isVar ? 'VAR' : (isMissed ? 'MISSED' : '')))
+                });
+            });
+            // Away goals
+            (m.g2 || []).forEach(g => {
+                const isPen = g.penalty === true || (g.name && g.name.includes('PEN'));
+                const isOG = g.own_goal === true || (g.name && g.name.includes('OG'));
+                const isVar = g.var === true || (g.name && g.name.includes('VAR')) || (g.var_note && g.var_note ===
+                    'disallowed');
+                const isMissed = g.missed === true || (g.name && g.name.includes('MISSED'));
+                events.push({
+                    minute: g.minute,
+                    type: 'goal',
+                    team: 'away',
+                    player: g.name,
+                    isPen: isPen,
+                    isOG: isOG,
+                    isVar: isVar,
+                    isMissed: isMissed,
+                    extra: isPen ? 'PEN' : (isOG ? 'OG' : (isVar ? 'VAR' : (isMissed ? 'MISSED' : '')))
+                });
+            });
+
+            // Sort by minute (numerical)
+            events.sort((a, b) => {
+                const aNum = parseInt(a.minute);
+                const bNum = parseInt(b.minute);
+                if (!isNaN(aNum) && !isNaN(bNum)) return aNum - bNum;
+                if (a.minute === 'HT') return -1;
+                if (b.minute === 'HT') return 1;
+                if (a.minute === 'FT') return 1;
+                if (b.minute === 'FT') return -1;
+                return 0;
+            });
+
+            // Build HTML
+            let html = '';
+            let lastMinute = 0;
+            let hasHT = false,
+                hasFT = false;
+
+            events.forEach(e => {
+                // Insert HT if we cross 45 and no HT yet
+                const minNum = parseInt(e.minute);
+                if (!hasHT && minNum >= 45 && lastMinute < 45) {
+                    html += `<div class="match-event ev-ht">⏱️ HALF TIME</div>`;
+                    hasHT = true;
+                }
+                if (e.minute === 'HT' || e.minute === 'ht') {
+                    html += `<div class="match-event ev-ht">⏱️ HALF TIME</div>`;
+                    hasHT = true;
+                    return;
+                }
+                if (e.minute === 'FT' || e.minute === 'ft') {
+                    html += `<div class="match-event ev-ft">🏁 FULL TIME — ${hs}–${as_}</div>`;
+                    hasFT = true;
+                    return;
+                }
+
+                if (e.type === 'goal') {
+                    let icon = '⚽';
+                    let cls = 'ev-goal';
+                    let extraText = '';
+                    if (e.isPen) { icon = '⚽';
+                        cls = 'ev-penalty';
+                        extraText = ' (PEN)'; }
+                    if (e.isOG) { icon = '⚽';
+                        cls = 'ev-og';
+                        extraText = ' (OG)'; }
+                    if (e.isVar) { icon = '📺';
+                        cls = 'ev-var';
+                        extraText = ' (VAR)'; }
+                    if (e.isMissed) { icon = '❌';
+                        cls = 'ev-penalty';
+                        extraText = ' (MISSED)'; }
+                    const teamName = e.team === 'home' ? m.home : m.away;
+                    const teamFlag = e.team === 'home' ? m.hf : m.af;
+                    const minuteDisplay = e.minute ? e.minute + "'" : '';
+                    html += `<div class="match-event ${cls}">
+                        <span class="ev-minute">${minuteDisplay}</span>
+                        <span class="ev-icon">${icon}</span>
+                        <span class="ev-desc"><b>${e.player}</b> <span class="ev-team">${teamFlag} ${teamName}</span> ${extraText}</span>
+                    </div>`;
+                }
+                lastMinute = minNum;
+            });
+
+            // If no HT inserted and match is finished, add HT at half position
+            if (isFT && !hasHT && events.length > 0) {
+                // Insert HT before the first goal after 45'
+                let inserted = false;
+                const newEvents = [];
+                for (let e of events) {
+                    const minNum = parseInt(e.minute);
+                    if (!inserted && minNum >= 45) {
+                        newEvents.push({ type: 'ht' });
+                        inserted = true;
+                    }
+                    newEvents.push(e);
+                }
+                let rebuilt = '';
+                newEvents.forEach(e => {
+                    if (e.type === 'ht') {
+                        rebuilt += `<div class="match-event ev-ht">⏱️ HALF TIME</div>`;
+                    } else if (e.type === 'goal') {
+                        let icon = '⚽';
+                        let cls = 'ev-goal';
+                        let extraText = '';
+                        if (e.isPen) { icon = '⚽';
+                            cls = 'ev-penalty';
+                            extraText = ' (PEN)'; }
+                        if (e.isOG) { icon = '⚽';
+                            cls = 'ev-og';
+                            extraText = ' (OG)'; }
+                        if (e.isVar) { icon = '📺';
+                            cls = 'ev-var';
+                            extraText = ' (VAR)'; }
+                        if (e.isMissed) { icon = '❌';
+                            cls = 'ev-penalty';
+                            extraText = ' (MISSED)'; }
+                        const teamName = e.team === 'home' ? m.home : m.away;
+                        const teamFlag = e.team === 'home' ? m.hf : m.af;
+                        const minuteDisplay = e.minute ? e.minute + "'" : '';
+                        rebuilt += `<div class="match-event ${cls}">
+                            <span class="ev-minute">${minuteDisplay}</span>
+                            <span class="ev-icon">${icon}</span>
+                            <span class="ev-desc"><b>${e.player}</b> <span class="ev-team">${teamFlag} ${teamName}</span> ${extraText}</span>
+                        </div>`;
+                    }
+                });
+                html = rebuilt;
+            }
+
+            // If finished, add FT marker if not present
+            if (isFT && !hasFT) {
+                html += `<div class="match-event ev-ft">🏁 FULL TIME — ${hs}–${as_}</div>`;
+            }
+
+            // If no events, show placeholder
+            if (!events.length) {
+                html = `<div class="empty" style="padding:16px;">No events available for this match.</div>`;
+            }
+
+            document.getElementById('matchModalEvents').innerHTML = html;
+            document.getElementById('matchModal').classList.add('open');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeMatchModal() {
+            document.getElementById('matchModal').classList.remove('open');
+            document.body.style.overflow = '';
+        }
+
+        // ─── Make match cards clickable ───
+        // We'll attach click handlers in render functions.
+
+        // ════════════════════════════════════════════════
+        //  GENERIC MATCH CARD – now shows goals (g1/g2) and clickable
+        // ════════════════════════════════════════════════
+        function matchCardGeneric(m, now, forceMode, matchIndex) {
             const isESPN = m.isESPN || false;
             const isLive = m.status === 'LIVE' || m.status === 'HT';
             const grpLbl = m.group ? 'Group ' + m.group : (m.matchday || '');
@@ -3042,7 +3379,9 @@
             if (isESPN) sourceLabel = ' • ESPN';
             const venueDisplay = m.venue || '';
 
-            return `<div class="mcard ${isLive?'is-live':''}">
+            const clickAttr = (matchIndex !== undefined && !isNaN(matchIndex) && matchIndex >= 0) ? ` onclick="showMatchSummary(${matchIndex})"` : '';
+
+            return `<div class="mcard ${isLive?'is-live':''}"${clickAttr}>
     <div class="mc-hd"><span class="mc-grp">${grpLbl}</span>${hdR}</div>
     <div class="mc-body">
       <div class="mc-fixture">
@@ -3056,7 +3395,7 @@
   </div>`;
         }
 
-        function matchCard(m, now, forceMode) {
+        function matchCard(m, now, forceMode, matchIndex) {
             const mst = merge(m, now);
             const st = forceMode || mst.st;
             const isLive = mst.st === 'LIVE' || mst.st === 'HT';
@@ -3104,7 +3443,9 @@
                 if (gl) goalsHTML = `<div class="mc-goals">⚽ ${gl}</div>`;
             }
 
-            return `<div class="mcard ${isLive?'is-live':isFT?'is-ft':'is-up'}">
+            const clickAttr = (matchIndex !== undefined && !isNaN(matchIndex) && matchIndex >= 0) ? ` onclick="showMatchSummary(${matchIndex})"` : '';
+
+            return `<div class="mcard ${isLive?'is-live':isFT?'is-ft':'is-up'}"${clickAttr}>
     <div class="mc-hd"><span class="mc-grp">${grpLbl}</span>${hdR}</div>
     <div class="mc-body">
       <div class="mc-fixture">
@@ -3126,7 +3467,7 @@
             const shown = OPF.filter(m => m.dt && (localDay(m.dt) === today || merge(m, now).st === 'LIVE' || merge(m, now)
                 .st === 'HT')).sort((a, b) => (a.dt || 0) - (b.dt || 0));
             if (!shown.length) return `<div class="today-wrap"><div class="today-hd"><h2>⚽ Today — ${fmtDL(now)}</h2><em>${tzLbl()}</em></div><div class="empty">No matches today.</div></div>`;
-            const cards = shown.map(m => {
+            const cards = shown.map((m, idx) => {
                 const ms = merge(m, now);
                 const kickedOff = m.dt && now > m.dt;
                 let sc, stEl, goalsEl = '';
@@ -3142,7 +3483,8 @@
                         `<div class="td-st-ns" style="color:var(--g2)">Kicked off · awaiting update</div>`; } else { sc =
                         `<div class="td-vs">vs</div>`; stEl =
                         `<div class="td-st-ns">● ${m.dt?fmtT(m.dt)+' '+tzLbl():'TBD'}</div>`; }
-                return `<div class="today-match"><div class="td-top"><span class="td-badge">${m.group?'Grp '+m.group:m.round||''}</span><span class="td-time">${m.dt?fmtT(m.dt)+' '+tzLbl():''}</span></div>
+                const clickAttr = ` onclick="showMatchSummary(${OPF.indexOf(m)})"`;
+                return `<div class="today-match" style="cursor:pointer;"${clickAttr}><div class="td-top"><span class="td-badge">${m.group?'Grp '+m.group:m.round||''}</span><span class="td-time">${m.dt?fmtT(m.dt)+' '+tzLbl():''}</span></div>
     <div class="td-row"><div class="td-team"><span class="td-fl">${m.hf}</span><span class="td-nm">${m.home}</span></div>
     <div class="td-ctr">${sc}${stEl}</div><div class="td-team r"><span class="td-fl">${m.af}</span><span class="td-nm">${m.away}</span></div></div>
     <div class="td-ven">${m.venue}</div>${goalsEl}</div>`;
@@ -3161,7 +3503,7 @@
             const upcoming = OPF.filter(m => { const ms = merge(m, now); return ms.st === 'NS' && m.dt && m.dt > now; }).sort((
                 a, b) => a.dt - b.dt).slice(0, 4);
             if (!upcoming.length) return '';
-            const cardsHTML = upcoming.map(m => matchCard(m, now, 'up')).join('');
+            const cardsHTML = upcoming.map((m, idx) => matchCard(m, now, 'up', OPF.indexOf(m))).join('');
             return `<div style="margin-bottom:16px"><div class="section-label">⏱ Upcoming — Countdown to Kick-off</div><div class="match-grid">${cardsHTML}</div></div>`;
         }
 
@@ -3184,7 +3526,8 @@
                     const goals = [...(m.g1 || []).map(g => `${m.hf} ${g.name} ${g.minute}'`), ...(m.g2 || [])
                         .map(g => `${m.af} ${g.name} ${g.minute}'`)
                     ].join(' · ');
-                    return `<div class="res-card">
+                    const clickAttr = ` onclick="showMatchSummary(${OPF.indexOf(m)})"`;
+                    return `<div class="res-card"${clickAttr}>
         <div class="res-teams">
           <div class="res-team"><span class="res-fl">${m.hf}</span><span class="res-nm">${m.home}</span></div>
           <div class="res-sc">${hs??'–'}–${as_??'–'}</div>
@@ -3208,7 +3551,7 @@
         }
 
         // ════════════════════════════════════════════════
-        //  STANDINGS
+        //  STANDINGS (unchanged)
         // ════════════════════════════════════════════════
         function getStandings(now) {
             if (WCGRPS.length && Object.keys(WC_TEAM_MAP).length) {
@@ -3303,7 +3646,7 @@
             return Object.keys(byDay).sort().map(k => {
                 const ms = byDay[k],
                     isT = k === today;
-                const cards = ms.map(m => {
+                const cards = ms.map((m, idx) => {
                     const mst = merge(m, now);
                     let sc, stEl;
                     if (mst.st === 'FT') { sc =
@@ -3314,7 +3657,8 @@
                             `<div class="mc-st2-lv">● ${mst.st==='HT'?'HT':(mst.min?mst.min+"'":'LIVE')}</div>`; } else { sc =
                             `<div class="mc-vs2">vs</div>`; stEl =
                             `<div class="mc-st2-ns">${m.dt?fmtT(m.dt)+' '+tzLbl():'TBD'}</div>`; }
-                    return `<div class="mc-sched ${mst.st==='LIVE'||mst.st==='HT'?'lv':mst.st==='FT'?'dn':''}"><div class="mc-si">
+                    const clickAttr = ` onclick="showMatchSummary(${OPF.indexOf(m)})"`;
+                    return `<div class="mc-sched ${mst.st==='LIVE'||mst.st==='HT'?'lv':mst.st==='FT'?'dn':''}"${clickAttr}><div class="mc-si">
         <div class="mc-teams-row"><div class="mc-t"><span class="mc-tfl">${m.hf}</span><span class="mc-tnm">${m.home}</span></div><div class="mc-t r"><span class="mc-tfl">${m.af}</span><span class="mc-tnm">${m.away}</span></div></div>
         <div class="mc-bot-row">${sc}${stEl}<div class="mc-meta-row"><span class="mc-grp-tag">${m.group||m.round}</span><span class="mc-ven2">${m.venue}</span></div></div>
       </div></div>`;
@@ -3348,7 +3692,8 @@
             if (pill) pill.className = 'live-pill' + (n > 0 ? ' on' : '');
             if (cnt) cnt.textContent = n;
             if (!n) return '';
-            const cards = unique.map(g => matchCardGeneric(g, now, 'live')).join('');
+            // For live matches, we don't have OPF index, so we use a dummy
+            const cards = unique.map((g, idx) => matchCardGeneric(g, now, 'live', -1)).join('');
             const source = espnLive.length ? 'ESPN' : (wcgLive.length ? 'worldcup26' : '');
             return `<div style="margin-bottom:16px"><div class="section-label">🔴 Live Now${espnLive.length ? ' (ESPN)' : wcgLive.length ? ' (worldcup26)' : ''}</div><div class="live-grid">${cards}</div></div>`;
         }
@@ -3488,7 +3833,6 @@
             const cleanSheets = {};
             GLOVE_DATA = {};
 
-            // Filter matches that are finished and have scores
             const finishedMatches = OPF.filter(m => {
                 const ms = merge(m, now);
                 return ms.st === 'FT' && ms.hs !== null && ms.as !== null;
@@ -3499,7 +3843,6 @@
                 const hs = ms.hs ?? m.hG;
                 const as_ = ms.as ?? m.aG;
 
-                // Clean sheet for away team (home scored 0)
                 if (hs === 0) {
                     const team = m.away;
                     const gkName = getGK(team);
@@ -3518,7 +3861,6 @@
                     });
                 }
 
-                // Clean sheet for home team (away scored 0)
                 if (as_ === 0) {
                     const team = m.home;
                     const gkName = getGK(team);
@@ -3541,7 +3883,6 @@
             const sorted = Object.values(cleanSheets).sort((a, b) => b.cs - a.cs);
             if (!sorted.length) return '<div class="empty">No clean sheet data yet.</div>';
 
-            // Store for modal
             GLOVE_DATA = Object.fromEntries(sorted.map(p => [p.name + '|' + p.team, p]));
 
             return `<div class="scorer-list glove-detail-list">${sorted.map((s,i)=>`
@@ -3853,8 +4194,25 @@
         }
 
         // ════════════════════════════════════════════════
-        //  TAB – now auto‑scrolls to today's schedule
+        //  TAB – now reliably scrolls to Today in Schedule
         // ════════════════════════════════════════════════
+        let scheduleScrollAttempts = 0;
+        let scheduleScrollTimer = null;
+
+        function scrollToTodaySchedule() {
+            const todayEl = document.getElementById('today-schedule');
+            if (todayEl) {
+                setTimeout(() => {
+                    todayEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 50);
+                scheduleScrollAttempts = 0;
+                if (scheduleScrollTimer) { clearInterval(scheduleScrollTimer);
+                    scheduleScrollTimer = null; }
+                return true;
+            }
+            return false;
+        }
+
         function go(name, btn) {
             clearSearch();
             document.querySelectorAll('.pane').forEach(p => p.classList.remove('on'));
@@ -3868,12 +4226,17 @@
             if (btn) btn.classList.add('on');
 
             if (name === 'schedule') {
-                setTimeout(() => {
-                    const todayEl = document.getElementById('today-schedule');
-                    if (todayEl) {
-                        todayEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                    }
-                }, 100);
+                if (!scrollToTodaySchedule()) {
+                    scheduleScrollAttempts = 0;
+                    if (scheduleScrollTimer) clearInterval(scheduleScrollTimer);
+                    scheduleScrollTimer = setInterval(() => {
+                        scheduleScrollAttempts++;
+                        if (scrollToTodaySchedule() || scheduleScrollAttempts > 6) {
+                            clearInterval(scheduleScrollTimer);
+                            scheduleScrollTimer = null;
+                        }
+                    }, 200);
+                }
             }
 
             window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -3885,6 +4248,9 @@
         renderAll();
         setTimeout(() => loadAllData(), 50);
         startCountdown();
+
+        // Close match modal on Escape
+        document.addEventListener('keydown', e => { if (e.key === 'Escape') closeMatchModal(); });
     </script>
 
 </body>
