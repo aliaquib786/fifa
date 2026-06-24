@@ -582,6 +582,73 @@ function fl(n){if(!n)return '🏳️';if(FLAGS[n])return FLAGS[n];for(const[k,v]
 const SHORT={'Bosnia & Herzegovina':'Bosnia','Czech Republic':'Czechia',"Côte d'Ivoire":'Ivory Coast','Cabo Verde':'Cape Verde','Congo DR':'DR Congo'};
 function sn(n){return SHORT[n]||n||'';}
 
+// ─── Team name alias mapping for better matching ───
+const TEAM_ALIASES = {
+  'usa': 'United States',
+  'england': 'England',
+  'france': 'France',
+  'argentina': 'Argentina',
+  'brazil': 'Brazil',
+  'germany': 'Germany',
+  'italy': 'Italy',
+  'spain': 'Spain',
+  'portugal': 'Portugal',
+  'netherlands': 'Netherlands',
+  'belgium': 'Belgium',
+  'croatia': 'Croatia',
+  'uruguay': 'Uruguay',
+  'switzerland': 'Switzerland',
+  'senegal': 'Senegal',
+  'morocco': 'Morocco',
+  'mexico': 'Mexico',
+  'canada': 'Canada',
+  'qatar': 'Qatar',
+  'australia': 'Australia',
+  'south korea': 'South Korea',
+  'japan': 'Japan',
+  'saudi arabia': 'Saudi Arabia',
+  'iran': 'Iran',
+  'iraq': 'Iraq',
+  'ghana': 'Ghana',
+  'cameroon': 'Cameroon',
+  'nigeria': 'Nigeria',
+  'tunisia': 'Tunisia',
+  'algeria': 'Algeria',
+  'egypt': 'Egypt',
+  'norway': 'Norway',
+  'sweden': 'Sweden',
+  'denmark': 'Denmark',
+  'poland': 'Poland',
+  'wales': 'Wales',
+  'scotland': 'Scotland',
+  'australia': 'Australia',
+  'new zealand': 'New Zealand',
+  'czechia': 'Czech Republic',
+  'czech republic': 'Czech Republic',
+  'ivory coast': "Côte d'Ivoire",
+  "côte d'ivoire": "Côte d'Ivoire",
+  'cabo verde': 'Cape Verde',
+  'cape verde': 'Cape Verde',
+  'dr congo': 'Congo DR',
+  'congo dr': 'Congo DR',
+  'bosnia': 'Bosnia & Herzegovina',
+  'bosnia & herzegovina': 'Bosnia & Herzegovina',
+  'south africa': 'South Africa',
+  'türkiye': 'Turkey',
+  'turkey': 'Turkey'
+};
+
+function normalizeTeamName(name) {
+  const lower = name.toLowerCase().trim();
+  // If we have an alias, use it
+  if (TEAM_ALIASES[lower]) return TEAM_ALIASES[lower];
+  // Otherwise, try to find a close match in FLAGS keys
+  for (const [key, val] of Object.entries(FLAGS)) {
+    if (key.toLowerCase() === lower) return key;
+  }
+  return name;
+}
+
 // ════════════════════════════════════════════════
 //  STATE
 // ════════════════════════════════════════════════
@@ -703,8 +770,9 @@ async function fetchLiveFromESPN() {
       const away = competitors.find(c => c.homeAway === 'away');
       if (!home || !away) return;
 
-      const homeTeam = home.team?.displayName || 'TBD';
-      const awayTeam = away.team?.displayName || 'TBD';
+      // Normalize team names using the alias mapping
+      const homeTeam = normalizeTeamName(home.team?.displayName || 'TBD');
+      const awayTeam = normalizeTeamName(away.team?.displayName || 'TBD');
       const homeScore = home.score !== undefined ? parseInt(home.score) : null;
       const awayScore = away.score !== undefined ? parseInt(away.score) : null;
       const statusType = event.status?.type || {};
@@ -739,7 +807,7 @@ async function fetchLiveFromESPN() {
         isSim: false,
         dt: event.date ? new Date(event.date) : null,
         _raw: event,
-        g1: [],  // will be filled from OPF in enrichWithGoals
+        g1: [],
         g2: []
       });
     });
@@ -756,7 +824,6 @@ async function fetchLiveFromESPN() {
 // ─── Helper: enrich a live match with goal data from OPF ───
 function enrichWithGoals(liveMatch) {
   if (!liveMatch || !OPF.length) return liveMatch;
-  // If already has goals, skip
   if (liveMatch.g1 && liveMatch.g1.length) return liveMatch;
   const mh = normTeam(liveMatch.home);
   const ma = normTeam(liveMatch.away);
