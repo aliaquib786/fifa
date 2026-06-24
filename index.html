@@ -3673,30 +3673,32 @@
         // ════════════════════════════════════════════════
         //  LIVE – now enriches ESPN matches with goals from OPF
         // ════════════════════════════════════════════════
-        function renderLiveOnHome(now) {
-            const espnLive = ESPN_LIVE_MATCHES.filter(m => m.status === 'LIVE' || m.status === 'HT').map(enrichWithGoals);
-            const wcgLive = WCG.filter(g => g.status === 'LIVE' || g.status === 'HT');
-            const allLive = [...espnLive, ...wcgLive];
-            const unique = [];
-            const seen = new Set();
-            allLive.forEach(m => {
-                const key = m.home + '|' + m.away;
-                if (!seen.has(key)) {
-                    seen.add(key);
-                    unique.push(m);
-                }
-            });
-            const n = unique.length;
-            const pill = document.getElementById('live-pill'),
-                cnt = document.getElementById('live-cnt');
-            if (pill) pill.className = 'live-pill' + (n > 0 ? ' on' : '');
-            if (cnt) cnt.textContent = n;
-            if (!n) return '';
-            // For live matches, we don't have OPF index, so we use a dummy
-            const cards = unique.map((g, idx) => matchCardGeneric(g, now, 'live', -1)).join('');
-            const source = espnLive.length ? 'ESPN' : (wcgLive.length ? 'worldcup26' : '');
-            return `<div style="margin-bottom:16px"><div class="section-label">🔴 Live Now${espnLive.length ? ' (ESPN)' : wcgLive.length ? ' (worldcup26)' : ''}</div><div class="live-grid">${cards}</div></div>`;
-        }
+        function renderLiveOnHome(now){
+  const espnLive = ESPN_LIVE_MATCHES.filter(m => m.status === 'LIVE' || m.status === 'HT').map(enrichWithGoals);
+  const wcgLive = WCG.filter(g => g.status === 'LIVE' || g.status === 'HT');
+  const allLive = [...espnLive, ...wcgLive];
+  
+  // Deduplicate using normalized team names
+  const unique = [];
+  const seen = new Set();
+  allLive.forEach(m => {
+    const key = normTeam(m.home) + '|' + normTeam(m.away);
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(m);
+    }
+  });
+  
+  const n = unique.length;
+  const pill = document.getElementById('live-pill'), cnt = document.getElementById('live-cnt');
+  if (pill) pill.className = 'live-pill' + (n > 0 ? ' on' : '');
+  if (cnt) cnt.textContent = n;
+  if (!n) return '';
+  
+  const cards = unique.map((g, idx) => matchCardGeneric(g, now, 'live', -1)).join('');
+  const source = espnLive.length ? 'ESPN' : (wcgLive.length ? 'worldcup26' : '');
+  return `<div style="margin-bottom:16px"><div class="section-label">🔴 Live Now${espnLive.length ? ' (ESPN)' : wcgLive.length ? ' (worldcup26)' : ''}</div><div class="live-grid">${cards}</div></div>`;
+}
 
         // ════════════════════════════════════════════════
         //  TICKER
