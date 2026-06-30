@@ -959,7 +959,7 @@ function renderTicker(now){
     let label=isESPN?'<span class="ti-espn">ESPN</span>':'<span class="ti-live">LIVE</span>';
     h+=`<div class="ti">${label}<span>${hf} ${home}</span><span class="ti-sc">${hs}–${as_}</span><span>${af} ${away}</span>${min?`<span class="ti-min">${min}'</span>`:''}</div>`;
   });
-  ft.forEach(g=>h+=`<div class="ti"><span class="ti-ft">FT</span><span>${g.hf} ${g.home}</span><span class="ti-sc">${g.hs}–${g.as}</span><span>${g.af} ${g.away}</span></div>`);
+  ft.forEach(g=>{const pi=(g.hs===g.as)?getPenInfo(g.home,g.away):null;const pw=pi?(pi.hWinner?g.home:(pi.aWinner?g.away:'')):'';h+=`<div class="ti"><span class="ti-ft">FT</span><span>${g.hf} ${g.home}</span><span class="ti-sc">${g.hs}–${g.as}</span><span>${g.af} ${g.away}</span>${pw?`<span class="ti-min" style="color:#b8860b">${pw} on pens</span>`:''}</div>`;});
   next.forEach(m=>h+=`<div class="ti"><span class="ti-ns">NEXT</span><span>${m.hf} ${m.home} vs ${m.away} ${m.af}</span><span style="color:#555;font-size:9px">${lt(m.dt)}</span></div>`);
   if(!h)h=`<div class="ti" style="color:#555">${WCG.length||OPF.length} matches · refreshing…</div>`;
   el.innerHTML=h;
@@ -1011,6 +1011,7 @@ function matchCard(m,now,forceMode,matchIndex){
   const g1=m.g1||[],g2=m.g2||[];
   let goalsHTML='';
   if(isFT&&(g1.length||g2.length)){const gl=[...g1.map(g=>`${m.hf} ${g.name} ${g.minute}'`),...g2.map(g=>`${m.af} ${g.name} ${g.minute}'`)].join(' · ');if(gl)goalsHTML=`<div class="mc-goals">⚽ ${gl}</div>`;}
+  if(isFT)goalsHTML+=penBadge(m,mst.hs??m.hG,mst.as??m.aG);
   const clickAttr=(matchIndex!==undefined&&!isNaN(matchIndex)&&matchIndex>=0)?` onclick="showMatchSummary(${matchIndex})"`:'';
   return `<div class="mcard ${isLive?'is-live':isFT?'is-ft':'is-up'}"${clickAttr}>
     <div class="mc-hd"><span class="mc-grp">${grpLbl}</span>${hdR}</div>
@@ -1112,6 +1113,25 @@ async function showMatchSummary(matchIndex) {
       html = `<div class="empty" style="padding:16px;">No events available for this match.</div>`;
     }
   }
+  if(m.isKO && isFT && hs!==null && as_!==null && hs===as_){
+    const pi=getPenInfo(m.home,m.away,m);
+    if(pi){
+      const winnerName=pi.hWinner?m.home:(pi.aWinner?m.away:null);
+      if(winnerName){
+        html+=`<div class="match-event ev-ft" style="background:var(--ev-p,#b8860b);color:#fff">🥅 PENALTIES — ${winnerName} win ${Math.max(pi.hPen,pi.aPen)}-${Math.min(pi.hPen,pi.aPen)}</div>`;
+        if(pi.pk&&pi.pk.length){
+          pi.pk.forEach(p=>{
+            const teamDisplay=p.team==='home'?m.hf+' '+m.home:m.af+' '+m.away;
+            html+=`<div class="match-event ${p.scored?'ev-penalty':'ev-penalty ev-missed'}">
+              <span class="ev-minute"></span>
+              <span class="ev-icon">${p.scored?'⚽':'❌'}</span>
+              <span class="ev-desc"><b>${p.name}</b> <span class="ev-team">${teamDisplay}</span>${p.scored?'':' (Missed)'}</span>
+            </div>`;
+          });
+        }
+      }
+    }
+  }
   eventsContainer.innerHTML = html;
   document.getElementById('matchModal').classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -1176,7 +1196,7 @@ function renderToday(now){
     const ms=merge(m,now);
     const kickedOff=m.dt&&now>m.dt;
     let sc,stEl,goalsEl='';
-    if(ms.st==='FT'){sc=`<div class="td-sc ft">${ms.hs??m.hG??'–'}–${ms.as??m.aG??'–'}</div>`;stEl=`<div class="td-st-ft">● FT</div>`;const gl=[...(m.g1||[]).map(g=>`${m.hf} ${g.name} ${g.minute}'`),...(m.g2||[]).map(g=>`${m.af} ${g.name} ${g.minute}'`)].join(' · ');if(gl)goalsEl=`<div class="td-goals">⚽ ${gl}</div>`;}
+    if(ms.st==='FT'){const hs2=ms.hs??m.hG,as2=ms.as??m.aG;sc=`<div class="td-sc ft">${hs2??'–'}–${as2??'–'}</div>`;stEl=`<div class="td-st-ft">● FT</div>`;const gl=[...(m.g1||[]).map(g=>`${m.hf} ${g.name} ${g.minute}'`),...(m.g2||[]).map(g=>`${m.af} ${g.name} ${g.minute}'`)].join(' · ');if(gl)goalsEl=`<div class="td-goals">⚽ ${gl}</div>`;goalsEl+=penBadge(m,hs2,as2);}
     else if(ms.st==='LIVE'||ms.st==='HT'){sc=`<div class="td-sc live">${ms.hs??'–'}–${ms.as??'–'}</div>`;stEl=`<div class="td-st-live">● ${ms.st==='HT'?'HT':(ms.min?ms.min+"'":'LIVE')}</div>`;}
     else if(kickedOff){sc=`<div class="td-vs">⏳</div>`;stEl=`<div class="td-st-ns" style="color:var(--g2)">Kicked off · awaiting update</div>`;}
     else{sc=`<div class="td-vs">vs</div>`;stEl=`<div class="td-st-ns">● ${m.dt?fmtT(m.dt)+' '+tzLbl():'TBD'}</div>`;}
@@ -1198,9 +1218,19 @@ function renderUpcoming(now){
   return `<div style="margin-bottom:16px"><div class="section-label">⏱ Upcoming — Countdown to Kick-off</div><div class="match-grid">${cardsHTML}</div></div>`;
 }
 
+function getPenTakers(homeName,awayName){
+  if(!ESPN_LIVE_MATCHES||!ESPN_LIVE_MATCHES.length)return [];
+  const mh=normTeam(homeName), ma=normTeam(awayName);
+  const e=ESPN_LIVE_MATCHES.find(x=>{
+    const eh=normTeam(x.home), ea=normTeam(x.away);
+    return (eh===mh||eh.includes(mh)||mh.includes(eh))&&(ea===ma||ea.includes(ma)||ma.includes(ea));
+  });
+  return (e&&e.pk)||[];
+}
 function getPenInfo(homeName,awayName,m){
+  const pk=getPenTakers(homeName,awayName);
   if(m&&m.hP!==null&&m.hP!==undefined&&m.aP!==null&&m.aP!==undefined){
-    return {hPen:m.hP,aPen:m.aP,hWinner:m.hP>m.aP,aWinner:m.aP>m.hP,pk:[]};
+    return {hPen:m.hP,aPen:m.aP,hWinner:m.hP>m.aP,aWinner:m.aP>m.hP,pk};
   }
   if(!ESPN_LIVE_MATCHES||!ESPN_LIVE_MATCHES.length)return null;
   const mh=normTeam(homeName), ma=normTeam(awayName);
@@ -1219,10 +1249,9 @@ function penBadge(m,hs,as_){
   if(!winnerName)return '';
   const line=`<div class="res-pen">${winnerName} win ${Math.max(pi.hPen,pi.aPen)}-${Math.min(pi.hPen,pi.aPen)} on penalties</div>`;
   if(!pi.pk||!pi.pk.length)return line;
-  const hTakers=pi.pk.filter(p=>p.team==='home').map(p=>`${p.scored?'✓':'✗'} ${p.name}`).join(' · ');
-  const aTakers=pi.pk.filter(p=>p.team==='away').map(p=>`${p.scored?'✓':'✗'} ${p.name}`).join(' · ');
-  const takersHtml=`<div class="res-pen-tk">${m.hf} ${hTakers}</div><div class="res-pen-tk">${m.af} ${aTakers}</div>`;
-  return line+takersHtml;
+  const scorers=pi.pk.map(p=>{const team=p.team==='home'?m.hf:m.af;return `${team} ${p.name}${p.scored?'':' ❌'}`;}).join(' · ');
+  return line+`<div class="res-goals">⚽ ${scorers}</div>`;
+
 }
 
 
