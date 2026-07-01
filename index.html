@@ -311,6 +311,7 @@
     @media(min-width:500px){ .mc-si { flex-direction:row; align-items:center; } .mc-teams-row { flex:1; } .mc-bot-row { flex-direction:column; align-items:center; min-width:88px; max-width:106px; flex-shrink:0; gap:2px; } }
 
     .scorer-list { display:flex; flex-direction:column; gap:7px; max-width:600px; }
+    .boot-note { font-size:10px; color:var(--mu); max-width:600px; margin-bottom:8px; line-height:1.5; padding:6px 8px; background:var(--w2,#f7f4ee); border-radius:6px; }
     .srow { background:var(--w); border:1px solid var(--ru); border-radius:var(--r); display:flex; align-items:center; padding:9px 13px; gap:9px; box-shadow:var(--sh); cursor:pointer; transition:background .15s; }
     .srow:hover { background:var(--gbg); }
     .srow-rk { font-family:'Bebas Neue',sans-serif; font-size:18px; color:var(--ru2); width:18px; flex-shrink:0; }
@@ -960,7 +961,7 @@ function renderTicker(now){
     h+=`<div class="ti">${label}<span>${hf} ${home}</span><span class="ti-sc">${hs}–${as_}</span><span>${af} ${away}</span>${min?`<span class="ti-min">${min}'</span>`:''}</div>`;
   });
   ft.forEach(g=>{const pi=(g.hs===g.as)?getPenInfo(g.home,g.away):null;const pw=pi?(pi.hWinner?g.home:(pi.aWinner?g.away:'')):'';h+=`<div class="ti"><span class="ti-ft">FT</span><span>${g.hf} ${g.home}</span><span class="ti-sc">${g.hs}–${g.as}</span><span>${g.af} ${g.away}</span>${pw?`<span class="ti-min" style="color:#b8860b">${pw} on pens</span>`:''}</div>`;});
-  next.forEach(m=>h+=`<div class="ti"><span class="ti-ns">NEXT</span><span>${m.hf} ${m.home} vs ${m.away} ${m.af}</span><span style="color:#555;font-size:9px">${lt(m.dt)}</span></div>`);
+  next.forEach(m=>{const nh=resolveSlot(m.home,now),na=resolveSlot(m.away,now);h+=`<div class="ti"><span class="ti-ns">NEXT</span><span>${fl(nh)} ${nh} vs ${na} ${fl(na)}</span><span style="color:#555;font-size:9px">${lt(m.dt)}</span></div>`;});
   if(!h)h=`<div class="ti" style="color:#555">${WCG.length||OPF.length} matches · refreshing…</div>`;
   el.innerHTML=h;
 }
@@ -980,13 +981,15 @@ function matchCardGeneric(m,now,forceMode,matchIndex){
   if(isLive&&(g1.length||g2.length)){const gl=[...g1.map(g=>`${m.hf} ${g.name} ${g.minute}'`),...g2.map(g=>`${m.af} ${g.name} ${g.minute}'`)].join(' · ');if(gl)goalsHTML=`<div class="mc-goals">⚽ ${gl}</div>`;}
   const venueDisplay=m.venue||'';
   const clickAttr=(matchIndex!==undefined&&!isNaN(matchIndex)&&matchIndex>=0)?` onclick="showMatchSummary(${matchIndex})"`:'';
+  const hNameR=resolveSlot(m.home,now), aNameR=resolveSlot(m.away,now);
+  const hPhR=/^[WL]\d+$/.test(hNameR),aPhR=/^[WL]\d+$/.test(aNameR);
   return `<div class="mcard ${isLive?'is-live':''}"${clickAttr}>
     <div class="mc-hd"><span class="mc-grp">${grpLbl}</span>${hdR}</div>
     <div class="mc-body">
       <div class="mc-fixture">
-        <div class="mc-team"><span class="mc-flag">${m.hf}</span><span class="mc-name">${m.home}</span></div>
+        <div class="mc-team"><span class="mc-flag">${hPhR?'🏳️':fl(hNameR)}</span><span class="mc-name"${hPhR?' style="color:var(--mu)"':''}>${hNameR}</span></div>
         ${center}
-        <div class="mc-team r"><span class="mc-flag">${m.af}</span><span class="mc-name">${m.away}</span></div>
+        <div class="mc-team r"><span class="mc-flag">${aPhR?'🏳️':fl(aNameR)}</span><span class="mc-name"${aPhR?' style="color:var(--mu)"':''}>${aNameR}</span></div>
       </div>
     </div>
     <div class="mc-ft-bar">${venueDisplay}</div>
@@ -1013,13 +1016,15 @@ function matchCard(m,now,forceMode,matchIndex){
   if(isFT&&(g1.length||g2.length)){const gl=[...g1.map(g=>`${m.hf} ${g.name} ${g.minute}'`),...g2.map(g=>`${m.af} ${g.name} ${g.minute}'`)].join(' · ');if(gl)goalsHTML=`<div class="mc-goals">⚽ ${gl}</div>`;}
   if(isFT)goalsHTML+=penBadge(m,mst.hs??m.hG,mst.as??m.aG);
   const clickAttr=(matchIndex!==undefined&&!isNaN(matchIndex)&&matchIndex>=0)?` onclick="showMatchSummary(${matchIndex})"`:'';
+  const hNameC=resolveSlot(m.home,now), aNameC=resolveSlot(m.away,now);
+  const hPhC=/^[WL]\d+$/.test(hNameC),aPhC=/^[WL]\d+$/.test(aNameC);
   return `<div class="mcard ${isLive?'is-live':isFT?'is-ft':'is-up'}"${clickAttr}>
     <div class="mc-hd"><span class="mc-grp">${grpLbl}</span>${hdR}</div>
     <div class="mc-body">
       <div class="mc-fixture">
-        <div class="mc-team"><span class="mc-flag">${m.hf}</span><span class="mc-name">${m.home}</span></div>
+        <div class="mc-team"><span class="mc-flag">${hPhC?'🏳️':fl(hNameC)}</span><span class="mc-name"${hPhC?' style="color:var(--mu)"':''}>${hNameC}</span></div>
         ${center}
-        <div class="mc-team r"><span class="mc-flag">${m.af}</span><span class="mc-name">${m.away}</span></div>
+        <div class="mc-team r"><span class="mc-flag">${aPhC?'🏳️':fl(aNameC)}</span><span class="mc-name"${aPhC?' style="color:var(--mu)"':''}>${aNameC}</span></div>
       </div>
     </div>
     <div class="mc-ft-bar">${m.venue}</div>
@@ -1201,13 +1206,16 @@ function renderToday(now){
     else if(kickedOff){sc=`<div class="td-vs">⏳</div>`;stEl=`<div class="td-st-ns" style="color:var(--g2)">Kicked off · awaiting update</div>`;}
     else{sc=`<div class="td-vs">vs</div>`;stEl=`<div class="td-st-ns">● ${m.dt?fmtT(m.dt)+' '+tzLbl():'TBD'}</div>`;}
     const clickAttr=` onclick="showMatchSummary(${OPF.indexOf(m)})"`;
+    const hNameT=resolveSlot(m.home,now), aNameT=resolveSlot(m.away,now);
+    const hPhT=/^[WL]\d+$/.test(hNameT),aPhT=/^[WL]\d+$/.test(aNameT);
     return `<div class="today-match" style="cursor:pointer;"${clickAttr}><div class="td-top"><span class="td-badge">${m.group?'Grp '+m.group:m.round||''}</span><span class="td-time">${m.dt?fmtT(m.dt)+' '+tzLbl():''}</span></div>
-    <div class="td-row"><div class="td-team"><span class="td-fl">${m.hf}</span><span class="td-nm">${m.home}</span></div>
-    <div class="td-ctr">${sc}${stEl}</div><div class="td-team r"><span class="td-fl">${m.af}</span><span class="td-nm">${m.away}</span></div></div>
+    <div class="td-row"><div class="td-team"><span class="td-fl">${hPhT?'🏳️':fl(hNameT)}</span><span class="td-nm"${hPhT?' style="color:var(--mu)"':''}>${hNameT}</span></div>
+    <div class="td-ctr">${sc}${stEl}</div><div class="td-team r"><span class="td-fl">${aPhT?'🏳️':fl(aNameT)}</span><span class="td-nm"${aPhT?' style="color:var(--mu)"':''}>${aNameT}</span></div></div>
     <div class="td-ven">${m.venue}</div>${goalsEl}</div>`;
   }).join('');
   const next=OPF.filter(m=>merge(m,now).st==='NS'&&m.dt&&m.dt>now).sort((a,b)=>a.dt-b.dt)[0];
-  const nb=next?`<div class="cd-next-bar">⏱ Next: <b>${next.hf} ${next.home} vs ${next.away} ${next.af}</b> · ${lt(next.dt)} <b id="cd-next-bar" style="margin-left:auto;font-family:'JetBrains Mono',monospace"></b></div>`:'';
+  const nxH=next?resolveSlot(next.home,now):null, nxA=next?resolveSlot(next.away,now):null;
+  const nb=next?`<div class="cd-next-bar">⏱ Next: <b>${/^[WL]\d+$/.test(nxH)?nxH:fl(nxH)+' '+nxH} vs ${/^[WL]\d+$/.test(nxA)?nxA:nxA+' '+fl(nxA)}</b> · ${lt(next.dt)} <b id="cd-next-bar" style="margin-left:auto;font-family:'JetBrains Mono',monospace"></b></div>`:'';
   return `<div class="today-wrap"><div class="today-hd"><h2>⚽ Today — ${fmtDL(now)}</h2><em>${tzLbl()}</em></div><div class="today-grid">${cards}</div>${nb}</div>`;
 }
 
@@ -1358,9 +1366,14 @@ function renderSchedule(now){
       if(mst.st==='FT'){const hs2=mst.hs??m.hG,as2=mst.as??m.aG;sc=`<div class="mc-sc2">${hs2??'–'}–${as2??'–'}</div>`;stEl=`<div class="mc-st2-ft">● FT${(m.isKO&&hs2!==null&&hs2===as2)?(()=>{const pi=getPenInfo(m.home,m.away,m);if(!pi)return'';const wn=pi.hWinner?m.home:(pi.aWinner?m.away:'');return wn?` · ${wn} on pens`:'';})():''}</div>`;}
       else if(mst.st==='LIVE'||mst.st==='HT'){sc=`<div class="mc-sc2">${mst.hs??'–'}–${mst.as??'–'}</div>`;stEl=`<div class="mc-st2-lv">● ${mst.st==='HT'?'HT':(mst.min?mst.min+"'":'LIVE')}</div>`;}
       else{sc=`<div class="mc-vs2">vs</div>`;stEl=`<div class="mc-st2-ns">${m.dt?fmtT(m.dt)+' '+tzLbl():'TBD'}</div>`;}
+      const homeName=resolveSlot(m.home,now), awayName=resolveSlot(m.away,now);
+      const homePh=/^[WL]\d+$/.test(homeName), awayPh=/^[WL]\d+$/.test(awayName);
+      const hFlag=homePh?'🏳️':fl(homeName), aFlag=awayPh?'🏳️':fl(awayName);
+      const hDisp=homePh?`<span style="color:var(--mu)">${homeName}</span>`:homeName;
+      const aDisp=awayPh?`<span style="color:var(--mu)">${awayName}</span>`:awayName;
       const clickAttr=` onclick="showMatchSummary(${OPF.indexOf(m)})"`;
       return `<div class="mc-sched ${mst.st==='LIVE'||mst.st==='HT'?'lv':mst.st==='FT'?'dn':''}"${clickAttr}><div class="mc-si">
-        <div class="mc-teams-row"><div class="mc-t"><span class="mc-tfl">${m.hf}</span><span class="mc-tnm">${m.home}</span></div><div class="mc-t r"><span class="mc-tfl">${m.af}</span><span class="mc-tnm">${m.away}</span></div></div>
+        <div class="mc-teams-row"><div class="mc-t"><span class="mc-tfl">${hFlag}</span><span class="mc-tnm">${hDisp}</span></div><div class="mc-t r"><span class="mc-tfl">${aFlag}</span><span class="mc-tnm">${aDisp}</span></div></div>
         <div class="mc-bot-row">${sc}${stEl}<div class="mc-meta-row"><span class="mc-grp-tag">${m.group||m.round}</span><span class="mc-ven2">${m.venue}</span></div></div>
       </div></div>`;
     }).join('');
@@ -1379,6 +1392,8 @@ function renderScorers(now){
     [...(m.g1||[]).map(g=>({...g,team:m.home,tf:m.hf,mi:m.i,opponent:m.away,round:m.round,group:m.group})),
      ...(m.g2||[]).map(g=>({...g,team:m.away,tf:m.af,mi:m.i,opponent:m.home,round:m.round,group:m.group}))].forEach(g=>{
       if(!g.name)return;
+      const isOG=g.own_goal===true||(g.name&&g.name.includes('OG'));
+      if(isOG)return; // own goals never count toward Golden Boot
       const key=g.name;
       if(!S[key])S[key]={name:g.name,team:g.team,tf:g.tf,goals:0,mins:[],details:[]};
       S[key].goals++;S[key].mins.push(g.minute);S[key].details.push({opponent:g.opponent,minute:g.minute,round:g.round,group:g.group,venue:m.venue,date:m.dt});
@@ -1387,9 +1402,13 @@ function renderScorers(now){
   const sorted=Object.values(S).sort((a,b)=>b.goals-a.goals);
   if(!sorted.length)return '<div class="empty">No scorers yet.</div>';
   SCORERS_DATA=Object.fromEntries(sorted.map(p=>[p.name,p]));
-  return `<div class="scorer-list">${sorted.map((s,i)=>`
+  let rank=0,prevGoals=null;
+  const note=`<div class="boot-note">Ranked by goals. FIFA breaks ties by assists, then fewest minutes played — not available from this data source, so tied players share a rank.</div>`;
+  return note+`<div class="scorer-list">${sorted.map((s,i)=>{
+    if(s.goals!==prevGoals){rank=i+1;prevGoals=s.goals;}
+    return`
     <div class="srow" onclick="showPlayerGoals('${s.name}')">
-      <div class="srow-rk ${i<3?'top':''}">${i+1}</div>
+      <div class="srow-rk ${rank<=3?'top':''}">${rank}</div>
       <div class="srow-fl">${s.tf}</div>
       <div class="srow-inf">
         <div class="srow-nm">${s.name}</div>
@@ -1397,7 +1416,7 @@ function renderScorers(now){
         <div class="srow-mins">${s.mins.map(m=>`<span class="srow-min">${m}'</span>`).join('')}</div>
       </div>
       <div class="srow-g">${s.goals}</div>
-    </div>`).join('')}</div>`;
+    </div>`;}).join('')}</div>`;
 }
 
 function showPlayerGoals(playerName){
@@ -1452,9 +1471,13 @@ function renderGoldenGlove(now){
   const sorted=Object.values(cleanSheets).sort((a,b)=>b.cs-a.cs);
   if(!sorted.length)return '<div class="empty">No clean sheet data yet.</div>';
   GLOVE_DATA=Object.fromEntries(sorted.map(p=>[p.name+'|'+p.team,p]));
-  return `<div class="scorer-list glove-detail-list">${sorted.map((s,i)=>`
+  let rank=0,prevCs=null;
+  const note=`<div class="boot-note">Ranked by clean sheets. FIFA's actual Golden Glove is chosen by the Technical Study Group (shot-stopping, distribution, etc.), not a public formula — this is a clean-sheet approximation.</div>`;
+  return note+`<div class="scorer-list glove-detail-list">${sorted.map((s,i)=>{
+    if(s.cs!==prevCs){rank=i+1;prevCs=s.cs;}
+    return`
     <div class="srow" onclick="showGloveDetails('${s.name}|${s.team}')">
-      <div class="srow-rk ${i<3?'top':''}">${i+1}</div>
+      <div class="srow-rk ${rank<=3?'top':''}">${rank}</div>
       <div class="srow-fl">${s.flag}</div>
       <div class="srow-inf">
         <div class="srow-nm">${s.name}</div>
@@ -1462,7 +1485,7 @@ function renderGoldenGlove(now){
         <div class="srow-mins">${s.details.map(d=>`<span class="srow-min">🧤 vs ${d.opponent}</span>`).join('')}</div>
       </div>
       <div class="srow-g" style="color:var(--sky);">${s.cs}</div>
-    </div>`).join('')}</div>`;
+    </div>`;}).join('')}</div>`;
 }
 
 function showGloveDetails(key){
